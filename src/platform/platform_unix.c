@@ -1,6 +1,7 @@
 #include "kf.h"
 
 #include <X11/Xlib.h>
+#include <GL/glx.h>
 
 
 typedef struct {
@@ -21,7 +22,7 @@ PlatformSpecificContext kf_get_platform_specific_context(void)
 	return (PlatformSpecificContext)&xinfo;
 }
 
-void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h)
+void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, bool maximized)
 {
 	XInfo *xinfo;
 
@@ -32,7 +33,7 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 	}
 
 	xinfo->screen = DefaultScreen(xinfo->display);
-	xinfo->window = XCreateSimpleWindow(xinfo->display, RootWindow(xinfo->display, xinfo->screen), x, y, w, h, 1, BlackPixel(xinfo->display, xinfo->screen), WhitePixel(xinfo->display, xinfo->screen));
+	xinfo->window = XCreateSimpleWindow(xinfo->display, RootWindow(xinfo->display, xinfo->screen), x, y, w, h, 1, WhitePixel(xinfo->display, xinfo->screen), BlackPixel(xinfo->display, xinfo->screen));
 	xinfo->del_atom = XInternAtom(xinfo->display, "WM_DELETE_WINDOW", 0);
 	XSetWMProtocols(xinfo->display, xinfo->window, &xinfo->del_atom, 1);
 
@@ -40,6 +41,14 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 	XSelectInput(xinfo->display, xinfo->window, xinfo->mask);
 	XStoreName(xinfo->display, xinfo->window, title);
 	XMapWindow(xinfo->display, xinfo->window);
+}
+
+void kf_resize_window(PlatformSpecificContext ctx, isize w, isize h)
+{
+	XInfo *xinfo;
+
+	xinfo = ctx;
+	XResizeWindow(xinfo->display, xinfo->window, (unsigned int)w, (unsigned int)h);
 }
 
 void kf_analyze_events(PlatformSpecificContext ctx, EventState *out)
@@ -50,5 +59,13 @@ void kf_analyze_events(PlatformSpecificContext ctx, EventState *out)
 	while (XPending(xinfo->display)) {
 		XEvent evt;
 		XNextEvent(xinfo->display, &evt);
+
+		if (evt.type == ClientMessage)
+		{
+			if ((Atom)evt.xclient.data.l[0] == xinfo->del_atom)
+			{
+				out->exited = true;
+			}
+		}
 	}
 }
