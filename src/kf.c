@@ -2,9 +2,6 @@
 #include "gb.h"
 #include "kf.h"
 
-/* C includes */
-#include "math.c"
-
 
 typedef struct {
 	PlatformSpecificContext platform_context;
@@ -27,10 +24,9 @@ int main(int argc, char **argv)
 		EventState *e = &g.event_state;
 
 		if (e->exited) {
-			goto mainloop_end;
+			break;
 		}
 	}
 
-mainloop_end:
 	return 0;
 }
