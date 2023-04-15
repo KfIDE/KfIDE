@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.in": "makefile",
+        "*.hcl": "c",
+        "stdbool.h": "c",
+        "silicon.h": "c"
+    }
+}
