@@ -2,10 +2,14 @@
 
 #include <windows.h>
 
+
 typedef struct {
 	WNDCLASSEX hWnd;
 } WInfo;
+
+
 static WInfo winfo;
+
 
 PlatformSpecificContext kf_get_platform_specific_context(void)
 {

@@ -2,6 +2,7 @@
 
 #include <X11/Xlib.h>
 
+
 typedef struct {
 	Display *display;
 	Window window;
@@ -10,7 +11,10 @@ typedef struct {
 	Atom del_atom;
 	long mask;
 } XInfo;
+
+
 static XInfo xinfo;
+
 
 PlatformSpecificContext kf_get_platform_specific_context(void)
 {
