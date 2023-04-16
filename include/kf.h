@@ -12,6 +12,7 @@
 #endif
 
 
+/* MATH */
 typedef struct {
 	isize x, y, w, h;
 } IRect;
@@ -66,5 +67,6 @@ typedef struct {
 	isize lang_head;
 	isize num_entries; /* basically just number of lines of text in the file, excluding header line. NOT total entries of each lang combined */
 } TranslationRecord;
+
 
 void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *record, u8 *data, isize length);
