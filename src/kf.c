@@ -8,6 +8,7 @@
 
 typedef struct {
 	gbAllocator heap_alloc, global_alloc, temp_alloc;
+	gbArena temp_backing, global_backing;
 	PlatformSpecificContext platform_context;
 
 	IRect win_bounds;
@@ -57,7 +58,8 @@ int main(int argc, char **argv)
 	kf_set_vsync(g.platform_context, true);
 
 	/* Translations init */
-	kf_load_translations_from_file(&g.translation_record);
+	static const char *test_str = "en;;nl\nTEST;;TEST";
+	kf_load_translations_from_csv_string(g.global_alloc, &g.translation_record, test_str, strlen(test_str));
 
 	while (true) {
 		kf_analyze_events(g.platform_context, &g.event_state);

@@ -3,7 +3,7 @@
 /* Parses through .csv data */
 #define TR_DELIM ";;"
 typedef enum { TranslationLoadPhase_HEADER, TranslationLoadPhase_BODY } TranslationLoadPhase;
-void kf_load_translations(gbAllocator alloc, TranslationRecord *record, u8 *data, isize length)
+void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *record, u8 *data, isize length)
 {
 	isize i;
 	isize num_header_entries;
@@ -22,7 +22,7 @@ void kf_load_translations(gbAllocator alloc, TranslationRecord *record, u8 *data
 
 	buf = gb_string_make_reserve(alloc, 4096); /* gb_string_free() at end */
 
-	phase = TrLoadPhase_HEADER;
+	phase = TranslationLoadPhase_HEADER;
 	num_header_entries = 0;
 	body_index = 0;
 	lang_offset = 0;
@@ -48,7 +48,7 @@ void kf_load_translations(gbAllocator alloc, TranslationRecord *record, u8 *data
 						permanent_buf = gb_string_make_length(alloc, buf, buflen - 1);
 					}
 
-					record->langs[record->lang_head++] = permanent_buf;
+					record->lang_keys[record->lang_head++] = permanent_buf;
 					gb_string_clear(buf);
 				}
 
@@ -86,12 +86,12 @@ void kf_load_translations(gbAllocator alloc, TranslationRecord *record, u8 *data
 	gb_string_free(buf);
 }
 
-void kf_tr_select_lang(struct TrRecord *record, u8 *selection)
+void kf_tr_select_lang(TranslationRecord *record, u8 *selection)
 {
 	isize i;
 
 	for (i = 0; i < record->lang_head; i++) {
-		if (strcmp(record->langs[i], selection) == 0) {
+		if (strcmp(record->lang_keys[i], selection) == 0) {
 			record->selected_lang = selection;
 			record->selected_lang_offset = i;
 			return;
@@ -101,7 +101,7 @@ void kf_tr_select_lang(struct TrRecord *record, u8 *selection)
 	GB_PANIC("");
 }
 
-u8 *kf_tr_query(struct TrRecord *record, isize index)
+u8 *kf_tr_query(TranslationRecord *record, isize index)
 {
 	isize calculated_index;
 
@@ -110,12 +110,12 @@ u8 *kf_tr_query(struct TrRecord *record, isize index)
 	return record->values[calculated_index];
 }
 
-void kf_tr_print(struct TrRecord *record)
+void kf_tr_print(TranslationRecord *record)
 {
 	isize i;
 
 	for (i = 0; i < record->lang_head; i++) {
-		printf("%s\n", record->langs[i]);
+		printf("%s\n", record->lang_keys[i]);
 	}
 
 	for (i = 0; i < record->num_entries; i++) {
