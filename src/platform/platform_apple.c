@@ -4,7 +4,9 @@
 
 
 typedef struct {
-	NSWindow* window;
+	NSWindow *window;
+	NSOpenGLContext *opengl_ctx;
+	CVDisplayLinkRef display_link;
 	bool exited;
 } MInfo;
 
@@ -17,7 +19,8 @@ CVReturn displayCallback(CVDisplayLinkRef displayLink, const CVTimeStamp *inNow,
 	return kCVReturnSuccess;
 }
 
-bool onWindowClose() {
+bool onWindowClose()
+{
 	minfo.exited = 1;
 	return true;
 }
@@ -48,28 +51,33 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 		NSOpenGLPFAStencilSize, 8,
 		0
 	};
-	CVDisplayLinkRef displayLink;
+	CVDisplayLinkRef display_link;
 	NSOpenGLPixelFormat *format = NSOpenGLPixelFormat_initWithAttributes(attributes);
 	NSOpenGLView *view = NSOpenGLView_initWithFrame(NSMakeRect(x, y, w, h), format);
 	NSOpenGLView_prepareOpenGL(view);
 
 
-	GLint swapInt = 1;
+	GLint swap_int = 1;
 	NSOpenGLContext *context = NSOpenGLView_openGLContext(view);
-	NSOpenGLContext_setValues(context, &swapInt, NSOpenGLContextParameterSwapInterval);
+	NSOpenGLContext_setValues(context, &swap_int, NSOpenGLContextParameterSwapInterval);
 
-	CVDisplayLinkCreateWithCGDisplay(CGMainDisplayID(), &displayLink);
-	CVDisplayLinkSetOutputCallback(displayLink, displayCallback, window);
-	CVDisplayLinkStart(displayLink);
+	CGDirectDisplayID displayID = CGMainDisplayID();
+	CVDisplayLinkCreateWithCGDisplay(displayID, &display_link);
+	CVDisplayLinkSetOutputCallback(display_link, displayCallback, window);
+	CVDisplayLinkStart(display_link);
 
 	NSOpenGLContext_makeCurrentContext(context);
 	NSWindow_setContentView(window, (NSView*)view);
 	NSWindow_setIsVisible(window, true);
 	NSWindow_makeMainWindow(window);
 
-	if (maximized) {
+	if (maximized)
+	{
 		NSWindow_setFrameAndDisplay(window, NSScreen_visibleFrame(NSScreen_mainScreen()), true, false);
 	}
+	minfo.window = window;
+	minfo.opengl_ctx = context;
+	minfo.display_link = display_link;
 	minfo.exited = 0;
 
 	func_to_SEL(onWindowClose);
@@ -83,8 +91,17 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 
 void kf_resize_window(PlatformSpecificContext ctx, isize w, isize h)
 {
-	MInfo* context = ctx;
+	MInfo *context = ctx;
 	NSWindow_setFrameAndDisplay(context->window, NSMakeRect(0, 0, w, h), true, true);
+}
+
+void kf_terminate_video(PlatformSpecificContext ctx)
+{
+	MInfo *context = ctx;
+	CVDisplayLinkStop(context->display_link);
+	CVDisplayLinkRelease(context->display_link);
+	NSView_release(NSWindow_contentView(context->window));
+	NSApplication_terminate(NSApp, (id)context->window);
 }
 
 
@@ -95,4 +112,10 @@ void kf_analyze_events(PlatformSpecificContext ctx, EventState *out)
 	NSApplication_updateWindows(NSApp);
 
 	out->exited = minfo.exited;
+}
+
+
+void kf_swap_buffers(PlatformSpecificContext ctx) {
+	MInfo *context = ctx;
+	NSOpenGLContext_flushBuffer(context->opengl_ctx);
 }
