@@ -19,7 +19,8 @@ CVReturn displayCallback(CVDisplayLinkRef displayLink, const CVTimeStamp *inNow,
 	return kCVReturnSuccess;
 }
 
-bool onWindowClose() {
+bool onWindowClose()
+{
 	minfo.exited = 1;
 	return true;
 }
@@ -114,7 +115,7 @@ void kf_analyze_events(PlatformSpecificContext ctx, EventState *out)
 }
 
 
-void kf_flush_buffer(PlatformSpecificContext ctx) {
+void kf_swap_buffers(PlatformSpecificContext ctx) {
 	MInfo *context = ctx;
 	NSOpenGLContext_flushBuffer(context->opengl_ctx);
 }
