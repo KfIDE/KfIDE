@@ -31,6 +31,43 @@ PlatformSpecificContext kf_get_platform_specific_context(void)
 	return (PlatformSpecificContext)&minfo;
 }
 
+bool kf_file_exists(gbString path)
+{
+	struct stat buffer;
+  	return (stat(path, &buffer) == 0);
+}
+
+gbString find_font(gbString font)
+{
+	bool font_exists;
+	isize count = 0;
+	gbString selected_path = font;
+
+	while (true) {
+		font_exists = kf_file_exists(selected_path);
+
+		if (!font_exists) {
+			switch (count) {
+				case 0: {
+					selected_path = gb_string_make(g.heap_alloc, "/System/Library/Fonts/");
+					selected_path = gb_string_append(selected_path, font);
+					break;
+				}
+				case 1: {
+					// /Users/<USERNAME>/Library/<FONT>
+					break;
+				}
+				case 2: return NULL;
+			}
+			count++;
+			continue;
+		}
+
+		return selected_path;
+	}
+	return NULL;
+}
+
 
 void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, bool maximized)
 {

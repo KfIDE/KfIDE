@@ -20,6 +20,16 @@ typedef struct {
 	isize x, y, w, h;
 } IRect;
 
+/* Color type. */
+typedef u32 Color;
+typedef struct {
+	u8 r, g, b, a;
+} ColorStruct;
+/* Convert RGB to Hex. */
+#define RGB(r, g, b) (u32)((u32)(0) | (u32)(r << 24) | (u32)(g << 16) | (u32)(b << 8) | (u32)(255))
+
+
+
 
 /* PLATFORM */
 /* Platform context (opaque ptr) */
@@ -27,8 +37,13 @@ typedef void *PlatformSpecificContext;
 
 /* Returns platform specific variables as a struct. */
 PlatformSpecificContext kf_get_platform_specific_context(void);
+/* Checks and returns a boolean if a file exists. */
+bool kf_file_exists(gbString path);
+/* Finds provided Truetype font. The function returns the path of where the font is in the system. */
+gbString find_font(gbString font);
 
 
+/* WINDOW */
 /* Initializes a window and an OpenGL instance. */
 void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, bool maximized);
 /* Set vsync on/off (1 for on, 0 for off, -1 for adaptive (may not work if the -EXT version can't be loaded)) */
@@ -39,6 +54,13 @@ void kf_resize_window(PlatformSpecificContext ctx, isize w, isize h);
 void kf_swap_buffers(PlatformSpecificContext ctx);
 /* Frees the window and OpenGL instance. */
 void kf_terminate_video(PlatformSpecificContext ctx);
+
+/* TEXT RENDERING */
+/* Initializes a font and returns its Opengl texture ID. */
+GLuint init_font(gbString font, isize size);
+/* Draws text on the screen. */
+void draw_text(GLuint font_id, gbString text, isize x, isize y, Color color);
+
 
 typedef struct {
 	isize mouse_x, mouse_y, mouse_xrel, mouse_yrel;
@@ -73,3 +95,16 @@ typedef struct {
 
 
 void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *record, u8 *data, isize length);
+
+
+typedef struct {
+	gbAllocator heap_alloc, global_alloc, temp_alloc;
+	gbArena temp_backing, global_backing;
+	PlatformSpecificContext platform_context;
+
+	IRect win_bounds;
+	EventState event_state;
+	TranslationRecord translation_record;
+} GlobalVars;
+
+GlobalVars g;
