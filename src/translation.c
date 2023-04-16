@@ -97,7 +97,7 @@ void kf_tr_select_lang(TranslationRecord *record, u8 *selection)
 			return;
 		}
 	}
-	printf("Selected invalid language: %s\n", selection);
+	printf("Selected invalid language: %s", selection);
 	GB_PANIC("");
 }
 
@@ -115,10 +115,10 @@ void kf_tr_print(TranslationRecord *record)
 	isize i;
 
 	for (i = 0; i < record->lang_head; i++) {
-		printf("%s\n", record->lang_keys[i]);
+		printf("%s", record->lang_keys[i]);
 	}
 
 	for (i = 0; i < record->num_entries; i++) {
-		printf("%s\n", record->values[i]);
+		printf("%s", record->values[i]);
 	}
 }

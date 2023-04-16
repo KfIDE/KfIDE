@@ -2,6 +2,7 @@
 #include "gb.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifdef __APPLE__
 	#define GL_SILENCE_DEPRECATION
@@ -10,6 +11,8 @@
 	#include <GL/gl.h>
 	#include <EGL/egl.h>
 #endif
+
+#define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
 
 
 /* MATH */
@@ -62,7 +65,7 @@ typedef struct {
 
 	u8 *selected_lang;
 	isize selected_lang_offset; /* this and selected_lang are cached together. selected_lang can probably be removed actually, we only use this part */
-	
+
 	u8 *values[MAX_TRANSLATION_LANGS * MAX_TRANSLATION_ENTRIES];
 	isize lang_head;
 	isize num_entries; /* basically just number of lines of text in the file, excluding header line. NOT total entries of each lang combined */
