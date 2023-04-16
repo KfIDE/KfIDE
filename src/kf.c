@@ -26,7 +26,10 @@ void opengl_test()
 		glColor3f(0, 0, 1); glVertex2f( 0.0f,  1.0f);
 	glEnd();
 
-	kf_flush_buffer(g.platform_context);
+	glFlush();
+	glFinish();
+
+	kf_swap_buffers(g.platform_context);
 }
 
 
@@ -34,6 +37,7 @@ int main(int argc, char **argv)
 {
 	g.platform_context = kf_get_platform_specific_context();
 	kf_init_video(g.platform_context, "hmm suspicious", 0, 0, 320, 240, true);
+	kf_set_vsync(g.platform_context, true);
 
 	while (true) {
 		kf_analyze_events(g.platform_context, &g.event_state);
