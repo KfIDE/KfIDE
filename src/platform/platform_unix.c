@@ -95,6 +95,7 @@ void kf_swap_buffers(PlatformSpecificContext ctx)
 
 	xinfo = ctx;
 	glXSwapBuffers(xinfo->display, xinfo->glx_window);
+	glFinish(); /* NOTE(EimaMei): For whatever reason Linux requires this. */
 }
 
 void kf_terminate_video(PlatformSpecificContext ctx)
