@@ -4,6 +4,17 @@
 #include <GL/gl.h>
 #include <GL/glx.h>
 
+
+/* IO stuff */
+void kf_path_parentdir(gbString path)
+{
+	
+}
+
+
+
+
+/* GFX stuff */
 typedef struct {
 	Display *display;
 	Window window;
@@ -33,10 +44,11 @@ PlatformSpecificContext kf_get_platform_specific_context(void)
 }
 
 static void (*glXSwapIntervalEXT)(Display *display, GLXDrawable drawable, int vsync);
-void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, bool maximized)
+void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, VideoFlags flags)
 {
 	XInfo *xinfo;
 	isize num_returned = 0;
+	isize final_w, final_h;
 
 	xinfo = ctx;
 	xinfo->display = XOpenDisplay(NULL);
@@ -45,7 +57,15 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 	}
 
 	xinfo->screen = DefaultScreen(xinfo->display);
-	xinfo->window = XCreateSimpleWindow(xinfo->display, RootWindow(xinfo->display, xinfo->screen), x, y, w, h, 1, WhitePixel(xinfo->display, xinfo->screen), BlackPixel(xinfo->display, xinfo->screen));
+	if ((flags & KF_VIDEO_MAXIMIZED) || w < 0 || h < 0) {
+		final_w = XDisplayWidth(xinfo->display, xinfo->screen);
+		final_h = XDisplayHeight(xinfo->display, xinfo->screen);
+	} else {
+		final_w = w;
+		final_h = h;
+	}
+
+	xinfo->window = XCreateSimpleWindow(xinfo->display, RootWindow(xinfo->display, xinfo->screen), x, y, final_w, final_h, 1, WhitePixel(xinfo->display, xinfo->screen), BlackPixel(xinfo->display, xinfo->screen));
 	xinfo->del_atom = XInternAtom(xinfo->display, "WM_DELETE_WINDOW", 0);
 	XSetWMProtocols(xinfo->display, xinfo->window, &xinfo->del_atom, 1);
 
@@ -72,7 +92,7 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 	glXSwapIntervalEXT = glXGetProcAddress("glXSwapIntervalEXT");
 }
 
-void kf_set_vsync(PlatformSpecificContext ctx, int vsync)
+void kf_set_vsync(PlatformSpecificContext ctx, isize vsync)
 {
 	XInfo *xinfo;
 
@@ -107,13 +127,21 @@ void kf_terminate_video(PlatformSpecificContext ctx)
 
 
 
-void kf_analyze_events(PlatformSpecificContext ctx, EventState *out)
+void kf_analyze_events(PlatformSpecificContext ctx, EventState *out, bool await)
 {
 	XInfo *xinfo;
+	XEvent evt;
 
 	xinfo = ctx;
+	if (await)
+	{
+		/* blocks until next event is recv'd, but DOES NOT REMOVE said event from queue so that
+		it will still be caught during the while loop below */
+		XPeekEvent(xinfo->display, &evt);
+	}
+
+	/* Now that we have recv'd our first event, actually go through the entire queue */
 	while (XPending(xinfo->display)) {
-		XEvent evt;
 		XNextEvent(xinfo->display, &evt);
 
 		if (evt.type == ClientMessage)

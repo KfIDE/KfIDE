@@ -41,5 +41,8 @@ elseif(UNIX)
     target_include_directories(KfIDE PUBLIC ${X11_INCLUDE_DIRS})
     target_link_libraries(KfIDE ${X11_LIBRARIES})
 
-    target_link_libraries(KfIDE ${OPENGL_glx_LIBRARY} ${OPENGL_LIBRARY})
+    find_library(GLIBC_MATH
+    	NAMES m libm
+    	PATHS "/usr/lib" "/usr/local/lib")
+    target_link_libraries(KfIDE ${OPENGL_glx_LIBRARY} ${OPENGL_LIBRARY} ${GLIBC_MATH})
 endif()
