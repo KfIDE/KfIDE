@@ -38,16 +38,16 @@ static GLint double_buf_attributes[] = { GLX_RGBA, GLX_RED_SIZE, 8, GLX_GREEN_SI
 static GLint single_buf_attributes[] = { GLX_RGBA, GLX_RED_SIZE, 8, GLX_GREEN_SIZE, 8, GLX_BLUE_SIZE, 8, GLX_ALPHA_SIZE, 8, None };
 
 
-PlatformSpecificContext kf_get_platform_specific_context(void)
+kf_PlatformSpecificContext kf_get_platform_specific_context(void)
 {
-	return (PlatformSpecificContext)&xinfo;
+	return (kf_PlatformSpecificContext)&xinfo;
 }
 
 static void (*glXSwapIntervalEXT)(Display *display, GLXDrawable drawable, int vsync);
-void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, VideoFlags flags)
+void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, kf_VideoFlags flags)
 {
 	XInfo *xinfo;
-	isize num_returned = 0;
+	int num_returned = 0;
 	isize final_w, final_h;
 
 	xinfo = ctx;
@@ -58,8 +58,9 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 
 	xinfo->screen = DefaultScreen(xinfo->display);
 	if ((flags & KF_VIDEO_MAXIMIZED) || w < 0 || h < 0) {
-		final_w = XDisplayWidth(xinfo->display, xinfo->screen);
-		final_h = XDisplayHeight(xinfo->display, xinfo->screen);
+		/*final_w = XDisplayWidth(xinfo->display, xinfo->screen);
+		final_h = XDisplayHeight(xinfo->display, xinfo->screen);*/
+		kf_write_window_size(ctx, &final_w, &final_h);
 	} else {
 		final_w = w;
 		final_h = h;
@@ -92,7 +93,7 @@ void kf_init_video(PlatformSpecificContext ctx, gbString title, isize x, isize y
 	glXSwapIntervalEXT = glXGetProcAddress("glXSwapIntervalEXT");
 }
 
-void kf_set_vsync(PlatformSpecificContext ctx, isize vsync)
+void kf_set_vsync(kf_PlatformSpecificContext ctx, isize vsync)
 {
 	XInfo *xinfo;
 
@@ -100,7 +101,7 @@ void kf_set_vsync(PlatformSpecificContext ctx, isize vsync)
 	glXSwapIntervalEXT(xinfo->display, xinfo->glx_window, vsync);
 }
 
-void kf_resize_window(PlatformSpecificContext ctx, isize w, isize h)
+void kf_resize_window(kf_PlatformSpecificContext ctx, isize w, isize h)
 {
 	XInfo *xinfo;
 
@@ -108,7 +109,16 @@ void kf_resize_window(PlatformSpecificContext ctx, isize w, isize h)
 	XResizeWindow(xinfo->display, xinfo->window, (unsigned int)w, (unsigned int)h);
 }
 
-void kf_swap_buffers(PlatformSpecificContext ctx)
+void kf_write_window_size(kf_PlatformSpecificContext ctx, isize *w, isize *h)
+{
+	XInfo *xinfo;
+
+	xinfo = ctx;
+	*w = XDisplayWidth(xinfo->display, xinfo->screen);
+	*h = XDisplayHeight(xinfo->display, xinfo->screen);
+}
+
+void kf_swap_buffers(kf_PlatformSpecificContext ctx)
 {
 	XInfo *xinfo;
 
@@ -116,7 +126,7 @@ void kf_swap_buffers(PlatformSpecificContext ctx)
 	glXSwapBuffers(xinfo->display, xinfo->glx_window);
 }
 
-void kf_terminate_video(PlatformSpecificContext ctx)
+void kf_terminate_video(kf_PlatformSpecificContext ctx)
 {
 	XInfo *xinfo;
 
@@ -127,14 +137,18 @@ void kf_terminate_video(PlatformSpecificContext ctx)
 
 
 
-void kf_analyze_events(PlatformSpecificContext ctx, EventState *out, bool await)
+void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool await)
 {
 	XInfo *xinfo;
 	XEvent evt;
 
 	xinfo = ctx;
-	if (await)
-	{
+
+	/* Write initial state */
+	/**out = (kf_EventState){0};*/ /* maybe this should be how we do it? idk */
+	out->was_window_resized = false;
+
+	if (await) {
 		/* blocks until next event is recv'd, but DOES NOT REMOVE said event from queue so that
 		it will still be caught during the while loop below */
 		XPeekEvent(xinfo->display, &evt);
@@ -144,12 +158,14 @@ void kf_analyze_events(PlatformSpecificContext ctx, EventState *out, bool await)
 	while (XPending(xinfo->display)) {
 		XNextEvent(xinfo->display, &evt);
 
-		if (evt.type == ClientMessage)
-		{
-			if ((Atom)evt.xclient.data.l[0] == xinfo->del_atom)
-			{
+		if (evt.type == ClientMessage) {
+			if ((Atom)evt.xclient.data.l[0] == xinfo->del_atom) {
 				out->exited = true;
 			}
+		} else if (evt.type == ResizeRequest) {
+			out->was_window_resized = true;
+			out->window_resize_width = evt.xresizerequest.width;
+			out->window_resize_height = evt.xresizerequest.height;
 		}
 	}
 }

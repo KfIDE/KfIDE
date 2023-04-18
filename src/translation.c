@@ -3,13 +3,12 @@
 /* Parses through .csv data */
 #define TR_DELIM ";;"
 typedef enum { TranslationLoadPhase_HEADER, TranslationLoadPhase_BODY } TranslationLoadPhase;
-void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *record, u8 *data, isize length)
+void kf_load_translations_from_csv_string(gbAllocator alloc, kf_TranslationRecord *record, u8 *data, isize length)
 {
 	isize i;
 	isize num_header_entries;
 	isize body_index, lang_offset;
 	u8 this_char;
-	u8 this_char_buf[2]; /* always contains this_char and then NULL, so that we can pass it to gb_string* procs */
 	gbString buf;
 	gbString permanent_buf; /* we 'leak' mem allocs into this var, but they are copied into the TrRecord anyway so it's fine */
 	TranslationLoadPhase phase;
@@ -27,11 +26,9 @@ void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *
 	body_index = 0;
 	lang_offset = 0;
 
-	this_char_buf[1] = '\0';
 	for (i = 0; i < length; i++) {
 		this_char = data[i];
-		this_char_buf[0] = this_char;
-		gb_string_appendc(buf, (const char *)this_char_buf); /* [0] = this_char, [1] = NULL */
+		gb_string_append_rune(buf, (Rune)this_char);
 		isize buflen = gb_string_length(buf);
 
 		/*printf("%s\n", buf);*/
@@ -86,7 +83,7 @@ void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *
 	gb_string_free(buf);
 }
 
-void kf_tr_select_lang(TranslationRecord *record, u8 *selection)
+void kf_tr_select_lang(kf_TranslationRecord *record, u8 *selection)
 {
 	isize i;
 
@@ -101,7 +98,7 @@ void kf_tr_select_lang(TranslationRecord *record, u8 *selection)
 	GB_PANIC("");
 }
 
-u8 *kf_tr_query(TranslationRecord *record, isize index)
+u8 *kf_tr_query(kf_TranslationRecord *record, isize index)
 {
 	isize calculated_index;
 
@@ -110,7 +107,7 @@ u8 *kf_tr_query(TranslationRecord *record, isize index)
 	return record->values[calculated_index];
 }
 
-void kf_tr_print(TranslationRecord *record)
+void kf_tr_print(kf_TranslationRecord *record)
 {
 	isize i;
 
