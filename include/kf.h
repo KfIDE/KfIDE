@@ -2,6 +2,7 @@
 #include "gb.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifdef KF_PLATFORM_APPLE
 	#define GL_SILENCE_DEPRECATION
@@ -9,6 +10,8 @@
 #else
 	#include <GL/gl.h>
 #endif
+
+#define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
 
 
 /* MATH */
@@ -40,6 +43,10 @@ typedef void *PlatformSpecificContext;
 
 /* Returns platform specific variables as a struct. */
 PlatformSpecificContext kf_get_platform_specific_context(void);
+/* Checks and returns a boolean if a file exists. */
+bool kf_file_exists(gbString path);
+/* Finds provided Truetype font. The function returns the path of where the font is in the system. */
+gbString find_font(gbString font);
 
 
 /* VIDEO (platform) */
@@ -61,6 +68,14 @@ void kf_terminate_video(PlatformSpecificContext ctx);
 
 
 /* EVENTS (platform) */
+
+/* TEXT RENDERING */
+/* Initializes a font and returns its Opengl texture ID. */
+GLuint init_font(gbString font, isize size);
+/* Draws text on the screen. */
+void draw_text(GLuint font_id, gbString text, isize x, isize y, Color color);
+
+
 typedef struct {
 	isize mouse_x, mouse_y, mouse_xrel, mouse_yrel;
 	bool exited;
@@ -70,8 +85,6 @@ typedef struct {
 If await is true, then this halts the program until there is actually an event
 to grab */
 void kf_analyze_events(PlatformSpecificContext ctx, EventState *out, bool await);
-
-
 
 
 
@@ -92,7 +105,7 @@ typedef struct {
 
 	u8 *selected_lang;
 	isize selected_lang_offset; /* this and selected_lang are cached together. selected_lang can probably be removed actually, we only use this part */
-	
+
 	u8 *values[MAX_TRANSLATION_LANGS * MAX_TRANSLATION_ENTRIES];
 	isize lang_head;
 	isize num_entries; /* basically just number of lines of text in the file, excluding header line. NOT total entries of each lang combined */
@@ -100,8 +113,6 @@ typedef struct {
 
 
 void kf_load_translations_from_csv_string(gbAllocator alloc, TranslationRecord *record, u8 *data, isize length);
-
-
 
 
 
