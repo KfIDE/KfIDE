@@ -2,7 +2,7 @@
 #include "gb.h"
 
 #include <stdlib.h>
-#include <time.h>
+#include <stdio.h>
 
 #ifdef KF_PLATFORM_APPLE
 	#define GL_SILENCE_DEPRECATION
@@ -12,6 +12,8 @@
 #endif
 
 #include "stb_truetype.h"
+
+#define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
 
 
 /* MATH */
@@ -149,27 +151,10 @@ You use the runes gbArray to convert a Rune
 to an index by finding the index of where that rune is, and then using it
 to index the kf_GlyphInfo array to fetch glyph data like TTF index.
 */
-
-/* Kern caching
-Caches kernings to prevent having to re-lookup every time with an stbtt API call.
-Only does so up to KF_KERN_CACHE_SIZE */
-#ifndef KF_USE_KERN_CACHE
-#define KF_USE_KERN_CACHE false
-#endif
-
-#ifndef KF_KERN_CACHE_SIZE
-#define KF_KERN_CACHE_SIZE 128
-#endif
 typedef struct {
 	isize 						width, height; /* glyph size */
 	GLuint						gl_tex; /* gl text */
 	int							index; /* ttf glyph index */ 
-
-#ifdef KF_USE_KERN_CACHE
-	isize						kern_head;
-	Rune						kern_cache_keys[KF_KERN_CACHE_SIZE]; /* keys are Rune of other character to render */
-	isize						kern_cache_values[KF_KERN_CACHE_SIZE]; /* values are the X kern amounts */
-#endif
 } kf_GlyphInfo;
 
 typedef struct {
