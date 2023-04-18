@@ -142,7 +142,7 @@ void kf_terminate_video(PlatformSpecificContext ctx)
 }
 
 
-void kf_analyze_events(PlatformSpecificContext ctx, EventState *out)
+void kf_analyze_events(PlatformSpecificContext ctx, EventState *out, bool await)
 {
 	NSEvent *e = NSApplication_nextEventMatchingMask(NSApp, NSEventMaskAny, NSDate_distantFuture(), 0, true);
 	NSApplication_sendEvent(NSApp, e);

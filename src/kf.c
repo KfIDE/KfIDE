@@ -4,7 +4,28 @@
 
 /* C include */
 #include "translation.c"
+#include "math.c"
 #include "text.c"
+#include "ui.c"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+
+typedef struct {
+	gbAllocator heap_alloc, global_alloc, temp_alloc, ui_alloc;
+	gbArena temp_backing, global_backing, ui_backing;
+
+	PlatformSpecificContext platform_context;
+
+	IRect win_bounds;
+	EventState event_state;
+	TranslationRecord translation_record;
+	UIContext ui_context;
+} GlobalVars;
+
+static GlobalVars g;
+
 
 
 /* To test if OpenGL is properly initialized. */
@@ -25,11 +46,13 @@ void opengl_test(u32 font_id)
 }
 
 
+
 int main(int argc, char **argv)
 {
 	/* Allocators init */
 	#define GLOBAL_SIZE		(isize)gb_megabytes(1)
 	#define TEMP_SIZE		(isize)gb_megabytes(1)
+	#define UI_SIZE			(isize)gb_kilobytes(512)
 
 	g.heap_alloc = gb_heap_allocator();
 
@@ -37,14 +60,17 @@ int main(int argc, char **argv)
 	g.global_alloc = gb_arena_allocator(&g.global_backing);
 	gb_arena_init_from_allocator(&g.temp_backing, g.heap_alloc, TEMP_SIZE);
 	g.temp_alloc = gb_arena_allocator(&g.temp_backing);
+	gb_arena_init_from_allocator(&g.ui_backing, g.heap_alloc, UI_SIZE);
+	g.ui_alloc = gb_arena_allocator(&g.ui_backing);
 
 	/* Gfx init */
 	g.platform_context = kf_get_platform_specific_context();
-	kf_init_video(g.platform_context, "hmm suspicious", 0, 0, 512, 512, true);
+  
+	kf_init_video(g.platform_context, "hmm suspicious", 0, 0, -1, -1, KF_VIDEO_MAXIMIZED);
+	kf_set_vsync(g.platform_context, 1);
 
-	glEnable(GL_BLEND);
+	/*glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_TEXTURE_2D);
 
 	u32 font_id = init_font(gb_string_make(g.temp_alloc, "geneva.ttf"), 64);
 	/* Translations init */
@@ -52,16 +78,34 @@ int main(int argc, char **argv)
 	kf_load_translations_from_csv_string(g.global_alloc, &g.translation_record, test_str, strlen(test_str));
 
 	while (true) {
-		kf_analyze_events(g.platform_context, &g.event_state);
-		EventState *e = &g.event_state;
+		kf_analyze_events(g.platform_context, &g.event_state, true);
 
+		EventState *e = &g.event_state;
 		if (e->exited) {
 			break;
 		}
 
-		opengl_test(font_id);
+		/* UI */
+		{
+			UIContext *ui = &g.ui_context;
 
+			/* UI BEGIN */
+			kf_ui_begin(ui, g.ui_alloc, 196, &g.event_state); {
+				kf_ui_push_origin(ui, 0, 0); {
+					kf_ui_color(ui, KF_RGBA(255, 255, 255, 255));
+					kf_ui_rect(ui, (IRect){ 0, 0, 200, 200 });
+				} kf_ui_pop_origin(ui);
+			} kf_ui_end(ui, false);
+		}
+
+		/* Render UI */
+		isize ui_index;
+		for (ui_index = 0; ui_index < gb_array_count(g.ui_context.draw_commands); ui_index++) {
+			/* TODO(psiv): implement UI rendering */
+		}
+    
 		gb_free_all(g.temp_alloc); /* clear temp buffer every frame (can grow infinitely if this isn't called periodically) */
+		gb_free_all(g.ui_alloc);
 	}
 	kf_terminate_video(g.platform_context);
 	return 0;
