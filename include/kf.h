@@ -16,6 +16,7 @@
 #define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
 
 
+
 /* MATH */
 typedef struct {
 	isize x, y;
@@ -33,6 +34,9 @@ typedef struct {
 	f32 x, y, x2, y2;
 } kf_UVRect;
 
+#define KF_IRECT(x, y, w, h) (kf_IRect){ (x), (y), (w), (h) }
+#define KF_UVRECT(x, y, x2, y2) (kf_UVRect){ (x), (y), (x2), (y2) }
+
 /* Applies a margin rect to a rect.
 For example: r={ 10, 10, 20, 20 } and margin={ 1, 2, 5, 5 }
 would return { 11, 12, 15, 15 }; it essentially "pushes in" each of the 4 rect fields by the specified margin
@@ -45,19 +49,36 @@ kf_IRect kf_apply_rect_translation(kf_IRect r, isize x, isize y);
 kf_UVRect kf_screen_to_uv(kf_IRect viewport, kf_IRect r);
 
 typedef struct { u8 r, g, b, a; } kf_Color;
-#define KF_RGBA(r, g, b, a) (kf_Color){ r, g, b, a }
-#define KF_RGB(r, g, b) KF_RGBA(r, g, b, 255)
+#define KF_RGBA(r, g, b, a) (kf_Color){ (r), (g), (b), (a) }
+#define KF_RGB(r, g, b) KF_RGBA((r), (g), (b), 255)
+
+
+
+
+
+/* STRINGS */
+/* Decode a utf8-formatted string and write into the given gbArray(Rune) */
+void kf_decode_utf8_string_to_rune_array(gbString str, gbArray(Rune) rune_array);
+/* Joins 2 paths and adds in '/' in the middle
+NOTE: This means you cannot put a string that ends with '/' */
+gbString kf_join_paths(gbAllocator join_alloc, gbString base, gbString add);
+
+
 
 
 
 
 /* TIME */
 typedef struct {
-	time_t _time;
+	clock_t start_t, end_t;
 } kf_Time;
 
 void kf_write_current_time(kf_Time *t);
 void kf_print_time_since(kf_Time *t);
+
+
+
+
 
 
 
@@ -67,6 +88,18 @@ typedef void *kf_PlatformSpecificContext;
 
 /* Returns platform specific variables as a struct. */
 kf_PlatformSpecificContext kf_get_platform_specific_context(void);
+
+
+
+/* IO (platform) */
+typedef struct {
+	gbString		path;
+	bool			is_dir;
+} kf_FileInfo;
+
+/* read dir */
+void kf_read_dir(gbString path, gbArray(kf_FileInfo) entries, gbAllocator str_alloc);
+
 
 
 /* VIDEO (platform) */
@@ -102,6 +135,13 @@ typedef struct {
 If await is true, then this halts the program until there is actually an event
 to grab */
 void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool await);
+
+
+/* FONT LOADING (platform) */
+extern const u8 *kf_system_font_paths[];
+
+/* Writes list of available system font paths to the array */
+void kf_query_system_fonts(gbAllocator str_alloc, gbAllocator temp_alloc, gbArray(gbString) out);
 
 
 
@@ -154,6 +194,8 @@ to index the kf_GlyphInfo array to fetch glyph data like TTF index.
 typedef struct {
 	isize 						width, height; /* glyph size */
 	GLuint						gl_tex; /* gl text */
+	int							ax, lsb;
+	isize						x1, y1; /* x and y offsets */
 	int							index; /* ttf glyph index */ 
 } kf_GlyphInfo;
 
@@ -163,7 +205,11 @@ typedef struct {
 	gbArray(kf_GlyphInfo)		glyphs; /* glyph-specific metrics/data */
 
 	isize						ascent, descent, line_gap; /* global font metrics */
+	f32							scale;
 } kf_Font;
+
+/* Returns internal (within kf_Font) index of the rune */
+isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, Rune r);
 
 
 

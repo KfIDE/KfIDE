@@ -5,6 +5,8 @@
 /* C include */
 #include "translation.c"
 #include "math.c"
+#include "strings.c"
+#include "font.c"
 #include "ui.c"
 #include "time.c"
 
@@ -21,13 +23,15 @@ typedef struct {
 
 	kf_PlatformSpecificContext platform_context;
 
-	/* DEBUG */
-	kf_Time debug_timer;
+	kf_Time debug_timer; /* for measuring perf. */
 
 	kf_IRect win_bounds;
 	kf_EventState event_state;
 	kf_TranslationRecord translation_record;
 	kf_UIContext ui_context;
+
+	gbArray(gbString) system_fonts; /* list of paths to avail. system fonts */
+	kf_Font canon_editing_font;
 
 	kf_Font font_std32;
 } GlobalVars;
@@ -50,16 +54,8 @@ void kf_load_ttf_font(kf_Font *out, gbAllocator alloc, gbAllocator temp_alloc, g
 	/* input string is UTF8 formatted; this writes the Rune[] it represents into the font struct */
 	isize glyphset_length = gb_string_length(glyphset);
 	gb_array_init_reserve(out->runes, alloc, glyphset_length);
-	isize i;
-	for (i = 0; i < glyphset_length;) {
-		if (glyphset[i] == 0) { break; }
 
-		Rune r = GB_RUNE_INVALID;
-		isize original_i = i;
-		i += gb_utf8_decode(&glyphset[i], (glyphset_length - i), &r);
-		GB_ASSERT(r != GB_RUNE_INVALID);
-		gb_array_append(out->runes, r);
-	}
+	kf_decode_utf8_string_to_rune_array(glyphset, out->runes);
 
 	/* now we can init our arrays since we know how many runes we'll be needing */
 	isize num_runes = gb_array_count(out->runes);
@@ -76,20 +72,22 @@ void kf_load_ttf_font(kf_Font *out, gbAllocator alloc, gbAllocator temp_alloc, g
 	    ascent = roundf(ascent * scale); /* from <stdlib.h> apparently */
 	    descent = roundf(descent * scale);
 
-	    out->ascent = (usize)ascent;
-	    out->descent = (usize)descent;
-	    out->line_gap = (usize)line_gap;
+	    out->ascent = (isize)ascent;
+	    out->descent = (isize)descent;
+	    out->line_gap = (isize)line_gap;
+
+		out->scale = scale;
 	}
 
 	isize bitmap_w, bitmap_h;
-	bitmap_w = (isize)(1.5f * (f32)(pt_size + 1)); /* 50% more than pt_size */
-	bitmap_h = (isize)(1.5f * (f32)(pt_size + 1));
+	bitmap_w = (isize)(1.10f * (f32)(pt_size + 1)); /* 10% more than pt_size */
+	bitmap_h = (isize)(1.10f * (f32)(pt_size + 1));
 
 	GB_ASSERT(pt_size < bitmap_h);
 
 	/* allocate a bitmap for the glyph */
 	isize bitmap_size = bitmap_w * bitmap_h;
-	u8 *bitmap = (u8 *)gb_alloc(temp_alloc, bitmap_size * sizeof(u8) * 3); /* RGB */
+	u8 *bitmap = (u8 *)gb_alloc(temp_alloc, bitmap_size * sizeof(u8));
 	gb_zero_size(bitmap, bitmap_size);
 
 	/*
@@ -102,9 +100,12 @@ void kf_load_ttf_font(kf_Font *out, gbAllocator alloc, gbAllocator temp_alloc, g
 
 	kf_write_current_time(&g.debug_timer); /* curious how long this loop takes, so let's time it */
 	int x = 0;
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	isize i;
 	for (i = 0; i < num_runes; i++) {
 		/* Step 1 */
-		gb_array_append(out->glyphs, (kf_GlyphInfo){0}); /* just to increase the count */
+		gb_array_append(out->glyphs, (kf_GlyphInfo){0}); /* just to increase the gb_array_count */
 		kf_GlyphInfo *this_glyph = &out->glyphs[i];
 
 		int glyph_index = stbtt_FindGlyphIndex(&out->stb_font, (int)out->runes[i]);
@@ -112,11 +113,15 @@ void kf_load_ttf_font(kf_Font *out, gbAllocator alloc, gbAllocator temp_alloc, g
 
 		int ax, lsb;
 		stbtt_GetGlyphHMetrics(&out->stb_font, glyph_index, &ax, &lsb);
+		this_glyph->ax = ax;
+		this_glyph->lsb = lsb;
 
 		/* Step 2 */
 		int c_x1, c_y1, c_x2, c_y2;
 		stbtt_GetGlyphBitmapBox(&out->stb_font, glyph_index, scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
 		/*printf("BM BOX: %d %d %d %d\n", c_x1, c_y1, c_x2, c_y2);*/
+		this_glyph->x1 = c_x1;
+		this_glyph->y1 = c_y1;
 
 		int glyph_w = c_x2 - c_x1;
 		int glyph_h = c_y2 - c_y1;
@@ -125,50 +130,27 @@ void kf_load_ttf_font(kf_Font *out, gbAllocator alloc, gbAllocator temp_alloc, g
 		this_glyph->height = (isize)glyph_h;
 
 		/* Step 3 */
-		int byte_offset = roundf(lsb * scale) + bitmap_w; /* idk how this works */
+		int byte_offset = 0; /* idk how this works */
 		u8 *final_bm = bitmap + byte_offset; /* first glyph pixel in the bitmap (not always 0,0 i guesss) */
 
 		/* this renders the ONE-CHANNEL glyph into the bitmap
 		but since we can't tint a 1-channel (GL_RED) tex (i think) we're gonna have to
-		expand it to RGB; this is why we allocated 3 * sizeof(u8) earlier */
-		stbtt_MakeGlyphBitmap(&out->stb_font, final_bm, glyph_w, glyph_h, bitmap_w, scale, scale, glyph_index);
-
-		/* for debug, we could make it write out .png images here using stb_image_write.h
-		in order to inspect what the glyph img actually looks like, or just render it with gl */
-
-		/* expand to rgb bitmap */
-		{
-			/* we could make this loop smarter by making it calcluate the src/dest rects
-			and only copying pixels actually in the glyph rect and not the entire image
-			but whatever. dumb loop may be slightly faster anyway. */
-			isize j, this;
-			for (j = 0; j < bitmap_w * bitmap_h; j++) { /* should be ~60K iterations per glyph */
-				this = final_bm[j];
-				final_bm[j*3] = this;
-				final_bm[j*3 + 1] = this;
-				final_bm[j*3 + 2] = this;
-			}
-		}
+		expand it to RGBA; this is why we allocated 4 * sizeof(u8) earlier */
+		stbtt_MakeGlyphBitmap(&out->stb_font, bitmap, glyph_w, glyph_h, bitmap_w, scale, scale, glyph_index);
 
 		/* Step 4 */
 		GLuint gl_tex;
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, bitmap_w);
+
 		glGenTextures(1, &gl_tex);
 		glBindTexture(GL_TEXTURE_2D, gl_tex);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bitmap_w, bitmap_h, 0, GL_RGB, GL_UNSIGNED_BYTE, bitmap);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, glyph_w, glyph_h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
 		glGenerateMipmap(GL_TEXTURE_2D);
 
 		this_glyph->gl_tex = gl_tex;
-
-		/* probably unnecessary */
-		gb_zero_size(bitmap, bitmap_size);
 	}
 	glBindTexture(GL_TEXTURE_2D, 0);
 	kf_print_time_since(&g.debug_timer);
-}
-
-static void _draw_tex_rect(GLuint texture, kf_UVRect uv, bool blend_flag)
-{
-	
 }
 
 
@@ -176,37 +158,44 @@ static void _draw_tex_rect(GLuint texture, kf_UVRect uv, bool blend_flag)
 int main(int argc, char **argv)
 {
 	/* Allocators init */
-	#define GLOBAL_SIZE		(isize)gb_megabytes(2)
-	#define TEMP_SIZE		(isize)gb_megabytes(2)
-	#define UI_SIZE			(isize)gb_kilobytes(512)
+	{
+		#define GLOBAL_SIZE		(isize)gb_megabytes(2)
+		#define TEMP_SIZE		(isize)gb_megabytes(1)
+		#define UI_SIZE			(isize)gb_kilobytes(512)
+		// #define GEN_SIZE		(isize)gb_megabytes(1) /* Not cleared each frame; manually clear memory */
 
-	g.heap_alloc = gb_heap_allocator();
+		g.heap_alloc = gb_heap_allocator();
 
-	gb_arena_init_from_allocator(&g.global_backing, g.heap_alloc, GLOBAL_SIZE);
-	g.global_alloc = gb_arena_allocator(&g.global_backing);
-	gb_arena_init_from_allocator(&g.temp_backing, g.heap_alloc, TEMP_SIZE);
-	g.temp_alloc = gb_arena_allocator(&g.temp_backing);
-	gb_arena_init_from_allocator(&g.ui_backing, g.heap_alloc, UI_SIZE);
-	g.ui_alloc = gb_arena_allocator(&g.ui_backing);
+		gb_arena_init_from_allocator(&g.global_backing, g.heap_alloc, GLOBAL_SIZE);
+		g.global_alloc = gb_arena_allocator(&g.global_backing);
+		gb_arena_init_from_allocator(&g.temp_backing, g.heap_alloc, TEMP_SIZE);
+		g.temp_alloc = gb_arena_allocator(&g.temp_backing);
+		gb_arena_init_from_allocator(&g.ui_backing, g.heap_alloc, UI_SIZE);
+		g.ui_alloc = gb_arena_allocator(&g.ui_backing);
+	}
 
 	/* Gfx init */
-	g.platform_context = kf_get_platform_specific_context();
-	kf_init_video(g.platform_context, "hmm suspicious", 0, 0, -1, -1, KF_VIDEO_MAXIMIZED);
-	kf_set_vsync(g.platform_context, 1);
-
-	/*glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_TEXTURE_2D);*/
+	{
+		g.platform_context = kf_get_platform_specific_context();
+		kf_init_video(g.platform_context, "hmm suspicious", 0, 0, -1, -1, KF_VIDEO_MAXIMIZED);
+		kf_set_vsync(g.platform_context, 1);
+	}
 
 	/* Translations init */
-	static const char *test_str = "en;;nl\nTEST;;TEST";
-	kf_load_translations_from_csv_string(g.global_alloc, &g.translation_record, (u8 *)test_str, strlen(test_str));
-	kf_write_window_size(g.platform_context, &g.win_bounds.w, &g.win_bounds.h);
+	{
+		static const char *test_str = "en;;nl\nTEST;;TEST";
+		kf_load_translations_from_csv_string(g.global_alloc, &g.translation_record, (u8 *)test_str, strlen(test_str));
+	}
 
 	/* Font init */
 	{
+		/* Allocates a gbArray(gbString) (inner strings allocated with 2nd param) with paths to system fonts */
+		gb_array_init_reserve(g.system_fonts, g.heap_alloc, 512);
+		kf_query_system_fonts(g.global_alloc, g.system_fonts);
+
 		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, gb_string_make(g.global_alloc, "/home/ps4star/Documents/eurostile.ttf"), gb_string_make(g.global_alloc, "qwertyuiopasdfghjklzxcvbnm "), 64);
 	}
+
 	while (true) {
 		kf_analyze_events(g.platform_context, &g.event_state, true);
 
@@ -215,9 +204,7 @@ int main(int argc, char **argv)
 			break;
 		}
 
-		if (e->was_window_resized) {
-			g.win_bounds = (kf_IRect){ 0, 0, e->window_resize_width, e->window_resize_height };
-		}
+		kf_write_window_size(g.platform_context, &g.win_bounds.w, &g.win_bounds.h);
 
 		/* Gfx start */
 		glClearColor(0.0, 0.0, 0.0, 1.0);
@@ -234,12 +221,12 @@ int main(int argc, char **argv)
 			kf_ui_begin(ui, g.ui_alloc, 196, &g.event_state); {
 				kf_ui_push_origin(ui, 10, 0); {
 					kf_ui_color(ui, KF_RGBA(255, 255, 255, 255));
-					kf_ui_rect(ui, (kf_IRect){ 0, 0, 200, 200 });
+					kf_ui_rect(ui, KF_IRECT(0, 0, 200, 200 ));
 
 					kf_ui_color(ui, KF_RGBA(255, 0, 0, 255));
-					kf_ui_rect(ui, (kf_IRect){ 20, 20, 40, 40 });
+					kf_ui_rect(ui, KF_IRECT(20, 20, 40, 40));
 
-					kf_ui_color(ui, KF_RGBA(255, 255, 255, 255));
+					kf_ui_color(ui, KF_RGBA(255, 0, 0, 255));
 					kf_ui_font(ui, &g.font_std32);
 					kf_ui_text(ui, debug_text, 0, 0);
 				} kf_ui_pop_origin(ui);
@@ -264,14 +251,12 @@ int main(int argc, char **argv)
 				kf_UIDrawRect *rect_cmd = &cmd->rect;
 				kf_UVRect rect_as_uv = kf_screen_to_uv(g.win_bounds, rect_cmd->rect);
 
-				/*glColor4b(color.r >> 1, color.g >> 1, color.b >> 1, color.a >> 1);
-				glRectf(rect_as_uv.x, rect_as_uv.y, rect_as_uv.x2, rect_as_uv.y2);*/
-			}
-				break;
+				glColor4b(color.r >> 1, color.g >> 1, color.b >> 1, color.a >> 1);
+				glRectf(rect_as_uv.x, rect_as_uv.y, rect_as_uv.x2, rect_as_uv.y2);
+			} break;
 
 			case KF_DRAW_TEXT: {
 				kf_UIDrawText *text_cmd = &cmd->text;
-				kf_UVRect rect_as_uv = kf_screen_to_uv(g.win_bounds, (kf_IRect){ text_cmd->begin.x, text_cmd->begin.y, 0, 0 });
 
 				gbString text = text_cmd->text;
 				kf_Font *font = text_cmd->font;
@@ -282,56 +267,62 @@ int main(int argc, char **argv)
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 				glEnable(GL_TEXTURE_2D);
 
-				/*glEnable(GL_TEXTURE_2D);
-				glPushMatrix(); // text matrix
-				// change the x/y world cords to real cords
-				glOrtho(0, 512, 512, 0, 0, 2);
-				glBegin(GL_QUADS);*/
+				/* this can be replaced with a shader later ig. basically it will
+				fabricate the RGB component from the Alpha, and current glColor() */
+				{
+					glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+
+					glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
+					glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PRIMARY_COLOR);
+					glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+
+					glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
+					glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_TEXTURE);
+					glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+				}
+
+				/* Client state setup */
+				{
+					glEnableClientState(GL_VERTEX_ARRAY);
+					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+				}
 
 				isize text_length = gb_string_length(text);
-				isize this_char;
-				f32 debug_x = -0.75f;
-				f32 debug_y = 0.75f;
+				gbArray(Rune) runes_to_render;
+				gb_array_init_reserve(runes_to_render, g.temp_alloc, text_length);
+
+				kf_decode_utf8_string_to_rune_array(text, runes_to_render);
+				isize num_runes = gb_array_count(runes_to_render);
+
+				isize rune_index;
 				kf_IVector2 text_pos = begin;
-				for (this_char = 0; this_char < text_length;) {
+
+				Rune this_rune, next_rune; /* next_rune is the next rune in the string to kern against */
+				for (rune_index = 0; rune_index < num_runes; rune_index++) {
 					/*
 					Text rendering steps:
-					1) Decode rune out of string
-					2) Grab internal index from Rune (this is used to reference other data in the Font struct)
-					3) Grab texture id from the Font struct for the Rune
-					4) Render the texture
+					1) Grab internal index from Rune (this is used to reference other data in the Font struct)
+					2) Grab texture id from the Font struct for the Rune
+					3) Render the texture
 					*/
 
-					/* Step 1 */
-					Rune r;
-					isize char_start = this_char; /* keep 'old' position just in case we need it */
-					this_char += gb_utf8_decode(&text[this_char], (text_length - this_char), &r);
+					this_rune = runes_to_render[rune_index];
 
-					/* Step 2 - look up index by Rune */
-					isize internal_index = -1;
-					int glyph_index;
+					/* Step 1 - look up index by Rune */
+					isize this_rune_internal_index = kf_lookup_internal_glyph_index_by_rune(font, this_rune);
+					GB_ASSERT(this_rune_internal_index > -1);
+
+					/* Step 2 */
+					kf_GlyphInfo *this_glyph = &font->glyphs[this_rune_internal_index];
+
+					/* Step 3a - calculate pixel box for text */
+					kf_IRect text_box = KF_IRECT(text_pos.x, text_pos.y, this_glyph->width, this_glyph->height);
+					text_box.y += font->ascent + this_glyph->y1;
+
+					/* Step 3b - Draw text */
+					kf_UVRect uv = kf_screen_to_uv(g.win_bounds, text_box);
 					{
-						isize i;
-						for (i = 0; i < gb_array_count(font->runes); i++) {
-							if (font->runes[i] == r) {
-								internal_index = i;
-								break;
-							}
-						}
-						GB_ASSERT(internal_index > -1);
-					}
-
-					/* Step 3 */
-					kf_GlyphInfo *glyph_info = &font->glyphs[internal_index];
-
-					/* Step 4a - calculate pixel box for text */
-					text_pos.x += 50;
-
-					/* Step 4b - Draw text */
-					kf_UVRect uv = kf_screen_to_uv(g.win_bounds, (kf_IRect){ text_pos.x, text_pos.y, glyph_info->width, glyph_info->height });
-					/*printf("GLYPH BOX: %f:%f:%f:%f ::: %d:%d:%d:%d ::: %d:%d:%d:%d\n", uv.x, uv.y, uv.x2, uv.y2, text_pos.x, text_pos.y, glyph_info->width, glyph_info->height, g.win_bounds.x, g.win_bounds.y, g.win_bounds.w, g.win_bounds.h);*/
-					{
-						glBindTexture(GL_TEXTURE_2D, glyph_info->gl_tex);
+						glBindTexture(GL_TEXTURE_2D, this_glyph->gl_tex);
 
 						GLfloat Vertices[] = {(float)uv.x, (float)uv.y, 0,
 											(float)uv.x2, (float)uv.y, 0,
@@ -342,27 +333,46 @@ int main(int argc, char **argv)
 											1, 1,
 											0, 1,
 						};
-						GLubyte indices[] = {0,1,2, // first triangle (bottom left - top left - top right)
-											0,2,3}; // second triangle (bottom left - top right - bottom right)
+						GLubyte indices[] = {0,1,2, /* first triangle (bottom left - top left - top right) */
+											0,2,3}; /* second triangle (bottom left - top right - bottom right) */
 
-						glEnableClientState(GL_VERTEX_ARRAY);
+						
 						glVertexPointer(3, GL_FLOAT, 0, Vertices);
-
-						glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 						glTexCoordPointer(2, GL_FLOAT, 0, TexCoord);
 
 						glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, indices);
+					}
 
-						glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-						glDisableClientState(GL_VERTEX_ARRAY);
-						glBindTexture(GL_TEXTURE_2D, 0);
+					/* Apply X advance if not the last char */
+					if (rune_index + 1 < num_runes) {
+						next_rune = runes_to_render[rune_index + 1];
+
+						/* Grab internal index for next_rune, so we can add kerning later without using codepoints directly */
+						isize next_rune_internal_index = kf_lookup_internal_glyph_index_by_rune(font, next_rune);
+						GB_ASSERT(next_rune_internal_index > -1);
+
+						/* Add const spacing */
+						f32 scale = font->scale;
+						int ax = this_glyph->ax;
+						int lsb = this_glyph->lsb;
+						text_pos.x += roundf(ax * scale);
+
+						/* Add kerning */
+						int kern = stbtt_GetGlyphKernAdvance(&font->stb_font, (int)this_glyph->index, (int)font->glyphs[next_rune_internal_index].index);
+						text_pos.x += roundf(kern * scale);
 					}
 				}
 
-				/*glEnd();
-				glPopMatrix();*/
-			}
-				break;
+				/* Reset GL state */
+				{
+					glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+					glDisableClientState(GL_VERTEX_ARRAY);
+					glBindTexture(GL_TEXTURE_2D, 0);
+					glBindTexture(GL_TEXTURE_2D, 0);
+					glDisable(GL_BLEND);
+					glDisable(GL_TEXTURE_2D);
+				}
+			} break;
 			}
 		}
 

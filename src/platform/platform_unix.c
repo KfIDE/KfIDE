@@ -4,11 +4,31 @@
 #include <GL/gl.h>
 #include <GL/glx.h>
 
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+
 
 /* IO stuff */
-void kf_path_parentdir(gbString path)
+void kf_read_dir(gbString path, gbArray(kf_FileInfo) entries, gbAllocator str_alloc)
 {
-	
+	GB_ASSERT(path != NULL && entries != NULL);
+
+	DIR *dir;
+	struct dirent *entry;
+	kf_FileInfo this;
+
+	dir = opendir(path);
+	while ((entry = readdir(dir)) != NULL) {
+		gbString name_as_gb = 		gb_string_make(str_alloc, entry->d_name); /* Only the filename */
+		gbString full_path =		kf_path_join(str_alloc, path, name_as_gb); /* Gets full path by joining dir path to file name */
+
+		this.path =					full_path;
+		this.is_dir =				(entry->d_type == DT_DIR); /* TODO(psiv): handle other DT_* possibilities */
+		gb_array_append(entries, this);
+	}
+	closedir(dir);
 }
 
 
@@ -48,7 +68,7 @@ void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isiz
 {
 	XInfo *xinfo;
 	int num_returned = 0;
-	isize final_w, final_h;
+	isize final_w = w, final_h = h;
 
 	xinfo = ctx;
 	xinfo->display = XOpenDisplay(NULL);
@@ -57,13 +77,10 @@ void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isiz
 	}
 
 	xinfo->screen = DefaultScreen(xinfo->display);
+
 	if ((flags & KF_VIDEO_MAXIMIZED) || w < 0 || h < 0) {
-		/*final_w = XDisplayWidth(xinfo->display, xinfo->screen);
-		final_h = XDisplayHeight(xinfo->display, xinfo->screen);*/
-		kf_write_window_size(ctx, &final_w, &final_h);
-	} else {
-		final_w = w;
-		final_h = h;
+		final_w = XDisplayWidth(xinfo->display, xinfo->screen);
+		final_h = XDisplayHeight(xinfo->display, xinfo->screen);
 	}
 
 	xinfo->window = XCreateSimpleWindow(xinfo->display, RootWindow(xinfo->display, xinfo->screen), x, y, final_w, final_h, 1, WhitePixel(xinfo->display, xinfo->screen), BlackPixel(xinfo->display, xinfo->screen));
@@ -78,8 +95,7 @@ void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isiz
 	xinfo->swap_flag = True;
 	xinfo->fb_configs = glXChooseFBConfig(xinfo->display, DefaultScreen(xinfo->display), double_buf_attributes, &num_returned);
 	GB_ASSERT(num_returned > 0);
-	if (xinfo->fb_configs == NULL) /* resort to single-buffer if DB not available */
-	{
+	if (xinfo->fb_configs == NULL) { /* resort to single-buffer if DB not available */
 		xinfo->fb_configs = glXChooseFBConfig(xinfo->display, DefaultScreen(xinfo->display), single_buf_attributes, &num_returned);
 		GB_ASSERT(num_returned > 0);
 		xinfo->swap_flag = False;
@@ -112,10 +128,13 @@ void kf_resize_window(kf_PlatformSpecificContext ctx, isize w, isize h)
 void kf_write_window_size(kf_PlatformSpecificContext ctx, isize *w, isize *h)
 {
 	XInfo *xinfo;
+	XWindowAttributes attrs;
+	int revert;
 
 	xinfo = ctx;
-	*w = XDisplayWidth(xinfo->display, xinfo->screen);
-	*h = XDisplayHeight(xinfo->display, xinfo->screen);
+	XGetWindowAttributes(xinfo->display, xinfo->window, &attrs);
+	*w = (isize)attrs.width;
+	*h = (isize)attrs.height;
 }
 
 void kf_swap_buffers(kf_PlatformSpecificContext ctx)
@@ -169,3 +188,13 @@ void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool 
 		}
 	}
 }
+
+
+
+
+
+/* Define system fonts list */
+const u8 *kf_system_font_paths[] = {
+	"/usr/share/fonts",
+	"/usr/local/share/fonts",
+};
