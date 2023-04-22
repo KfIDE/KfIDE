@@ -100,7 +100,7 @@ void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(Rune) *rune_arr
 	string_length = str.length;
 	isize rune_count = 0;
 	for (this_char = 0; this_char < string_length;) {
-		this_char += kf_decode_utf8_single(&str.cstr[this_char], (string_length - this_char), &r);
+		this_char += kf_decode_utf8_single(&str.ptr[this_char], (string_length - this_char), &r);
 		KF_ASSERT(r != KF_RUNE_INVALID);
 		kf_array_append(rune_array, &r);
 		/*kfd_printf("IM DECODE %d ::: R DECODE ARR %d ::: OTHER GET %d", r, KF_ARRAY_GET(*rune_array, rune_count, Rune), *((Rune *)(&rune_array->start[4 * rune_count])));*/
@@ -154,7 +154,7 @@ void kf_append_rune_to_string(kf_String *str, Rune r)
     if (r >= 0) {
 		u8 buf[8] = {0};
 		isize len = kf_write_rune_as_utf8(buf, r);
-		kf_string_append_cstring_length(str, buf, len);
+		kf_string_append_cstring_len(str, buf, len);
 	}
 }
 
@@ -164,7 +164,7 @@ kf_String kf_path_parentdir(kf_String path, kf_Allocator new_path_alloc)
 	isize last_slash = -1;
 	isize i;
 	for (i = 0; i < path.length; i++) {
-		if (path.cstr[i] == kf_path_separator) {
+		if (path.ptr[i] == kf_path_separator) {
 			last_slash = i;
 		}
 	}
@@ -173,9 +173,8 @@ kf_String kf_path_parentdir(kf_String path, kf_Allocator new_path_alloc)
 		KF_PANIC("Invalid path given to kf_path_parentdir()");
 	}
 
-	/* Re-construct path as a kf_String but with shortened length; also null-terminate it at the new length */
-	kf_String out = kf_string_set_from_cstring_length_capacity(path.cstr, last_slash, last_slash + 1);
-	out.cstr[last_slash] = '\0';
+	/* Re-construct path as a kf_String but with shortened length; no null-termination */
+	kf_String out = kf_string_set_from_cstring_len(path.ptr, last_slash);
 	return out;
 }
 
@@ -187,23 +186,23 @@ kf_String kf_join_paths(kf_Allocator join_alloc, kf_String base, kf_String add)
 	base_strlen = base.length;
 	add_strlen = add.length;
 	alloc_size = base_strlen + add_strlen + 1 + 1; /* +1 for NULL, +1 for kf_path_separator */
-	out = kf_string_make_length_capacity(join_alloc, alloc_size, alloc_size);
+	out = kf_string_make(join_alloc, alloc_size, alloc_size, KF_DEFAULT_STRING_GROW);
 
 	/* NOTE: out contains a fresh/unique cstr */
-	memcpy(out.cstr, base.cstr, base_strlen);
-	out.cstr[base_strlen] = kf_path_separator; /* Add in '/' (or '\' on win33) to conjunction point of the 2 strings */
-	memcpy(&out.cstr[base_strlen + 1], add.cstr, add_strlen);
-	out.cstr[alloc_size - 1] = '\0';
+	memcpy(out.ptr, base.ptr, base_strlen);
+	out.ptr[base_strlen] = kf_path_separator; /* Add in '/' (or '\' on win33) to conjunction point of the 2 strings */
+	memcpy(&out.ptr[base_strlen + 1], add.ptr, add_strlen);
+	out.ptr[alloc_size - 1] = '\0';
 
 	return out;
 }
 
 bool kf_string_ends_with(kf_String s, kf_String cmp)
 {
-	return strncmp(&s.cstr[s.length - cmp.length], cmp.cstr, cmp.length) == 0;
+	return strncmp(&s.ptr[s.length - cmp.length], cmp.ptr, cmp.length) == 0;
 }
 
 bool kf_string_ends_with_cstring(kf_String s, u8 *cmp, isize cmp_strlen)
 {
-	return strncmp(&s.cstr[s.length - cmp_strlen], cmp, cmp_strlen) == 0;
+	return strncmp(&s.ptr[s.length - cmp_strlen], cmp, cmp_strlen) == 0;
 }

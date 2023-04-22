@@ -13,6 +13,7 @@ kf_FileContents kf_file_read_contents(kf_Allocator a, bool null_terminate, kf_St
 			result.data = (u8 *)kf_alloc(a, final_len);
 			result.size = file_size;
 			kf_file_read_into_cstring(file, result.data, result.size, 0);
+
 			if (null_terminate) {
 				u8 *str = (u8 *)result.data;
 				str[file_size] = '\0';
@@ -39,13 +40,13 @@ void kf_walk_tree(kf_String root_dir, kf_WalkTreeProc callback, kf_Allocator tem
 	static const isize initial_cap = 2048;
 	static const isize min_avail_size = sizeof(kf_FileInfo)*initial_cap;
 
-	kfd_require_allocator_type(temp_alloc,		kf_AllocatorType_TEMP);
+	kfd_require_allocator_type(temp_alloc,		KF_ALLOC_TEMP);
 	kfd_require_allocator_space(temp_alloc,		min_avail_size);
 
 	KF_ARRAY(kf_FileInfo)						readdir_entries;
 	isize										c_entry = 0;
 	
-	readdir_entries = kf_array_make_length_capacity(temp_alloc, sizeof(kf_FileInfo), 0, initial_cap);
+	readdir_entries = kf_array_make(temp_alloc, sizeof(kf_FileInfo), 0, initial_cap, KF_DEFAULT_GROW);
 	kf_array_append(&readdir_entries, &(kf_FileInfo){ .path = root_dir, .is_dir = true });
 	while (true) {
 		break;

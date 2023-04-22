@@ -31,8 +31,8 @@ void kf_ui_begin(kf_UIContext *ctx, kf_Allocator alloc, isize expected_num_draw_
 	ctx->ref_state			= ref_state;
 
 	ctx->begin_allocator	= alloc;
-	ctx->draw_commands		= kf_array_make_capacity(ctx->begin_allocator, sizeof(kf_UIDrawCommand), expected_num_draw_commands);
-	ctx->origin_stack		= kf_array_make_capacity(ctx->begin_allocator, sizeof(kf_IRect), expected_num_draw_commands);
+	ctx->draw_commands		= kf_array_make(ctx->begin_allocator, sizeof(kf_UIDrawCommand), 0, expected_num_draw_commands, KF_DEFAULT_GROW);
+	ctx->origin_stack		= kf_array_make(ctx->begin_allocator, sizeof(kf_IRect), 0, expected_num_draw_commands, KF_DEFAULT_GROW);
 
 	ctx->margin				= KF_IRECT(0, 0, 0, 0);
 	ctx->color				= KF_RGBA(255, 255, 255, 255);

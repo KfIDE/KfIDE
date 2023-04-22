@@ -98,8 +98,6 @@ typedef struct kf_Utf8AcceptRange {
 	u8 lo, hi;
 } kf_Utf8AcceptRange;
 
-#define KF_READONLY_PTR const
-
 
 
 /* MEMORY */
@@ -114,17 +112,17 @@ isize kf_align_ceil(isize n);
 
 /* NOTE(ps4sar): this enum is completely unused outside of debug mode; see below */
 typedef enum {
-	kf_AllocatorType_HEAP,
-	kf_AllocatorType_TEMP,
-	kf_AllocatorType_PERMA,
+	KF_ALLOC_HEAP,
+	KF_ALLOC_TEMP,
+	KF_ALLOC_PERMA,
 } kf_AllocatorType;
 
 typedef enum {
-	kf_AllocationType_ALLOC,
-	kf_AllocationType_RESIZE,
-	kf_AllocationType_FREE,
-	kf_AllocationType_FREE_ALL,
-	kf_AllocationType_QUERY_AVAIL_SPACE,
+	KF_ALLOC_TYPE_ALLOC,
+	KF_ALLOC_TYPE_RESIZE,
+	KF_ALLOC_TYPE_FREE,
+	KF_ALLOC_TYPE_FREE_ALL,
+	KF_ALLOC_TYPE_QUERY_AVAIL_SPACE,
 } kf_AllocationType;
 
 typedef struct {
@@ -148,22 +146,14 @@ void kfd_require_allocator_space(kf_Allocator alloc, isize at_least);
 
 
 
-/*
-IMPORTANT NOTE TO CHINZ
 
-If a function will modify the header (or data or anything) on a kf_String of kf_Array,
-then it should take a pointer to that object.
-If it just reads it then it should take an immediate copy not a pointer.
 
-Thamk,
-ps4
-*/
 
 /* ARRAY */
 #define KF_DEFAULT_GROW 32 /* measured in number of elements, not bytes */
 #define KF_ARRAY(t) kf_Array
 typedef struct {
-	u8 *start;
+	u8 *ptr;
 	kf_Allocator backing;
 	isize type_width;
 	isize length;
@@ -171,12 +161,10 @@ typedef struct {
 	isize grow;
 } kf_Array;
 
-kf_Array kf_array_make_capacity(kf_Allocator alloc, isize type_width, isize initial_capacity);
-kf_Array kf_array_make_length_capacity(kf_Allocator alloc, isize type_width, isize initial_length, isize initial_capacity);
-kf_Array kf_array_make_length_capacity_grow(kf_Allocator alloc, isize type_width, isize initial_length, isize initial_capacity, isize grow);
+kf_Array kf_array_make(kf_Allocator alloc, isize type_width, isize initial_length, isize initial_capacity, isize grow);
 
-kf_Array kf_array_from_ptr(kf_Allocator alloc, void *ptr, isize type_width, isize num_elements);
-kf_Array kf_array_from_ptr_grow(kf_Allocator alloc, void *ptr, isize type_width, isize num_elements, isize grow);
+kf_Array kf_array_set_frozen_from_ptr(void *ptr, isize type_width, isize num_elements);
+kf_Array kf_array_set_dynamic_from_ptr(kf_Allocator alloc, void *ptr, isize type_width, isize num_elements, isize initial_capacity, isize grow);
 
 void *kf_array_get(kf_Array array, isize index);
 void *kf_array_get_type(kf_Array array, isize index, isize type_width);
@@ -185,19 +173,18 @@ void kf_array_set(kf_Array *array, isize index, u8 *data);
 
 void kf_array_append(kf_Array *array, void *new_element);
 void kf_array_append_multi(kf_Array *array, void *new_elements, isize num);
+
+void kf_freeze(kf_Array *array);
+void kf_unfreeze(kf_Array *array, kf_Allocator alloc, /*@SpecialVal(-1)*/isize capacity, /*@SpecialVal(-1)*/isize grow);
+bool kf_is_frozen(kf_Array array);
+
 void kf_array_pop(kf_Array *array);
 void kf_array_clear(kf_Array *array);
 
-void kf_array_freeze(kf_Array *array);
-void kf_array_unfreeze(kf_Array *array, kf_Allocator alloc);
-bool kf_array_is_frozen(kf_Array array);
-
 void kf_array_free(kf_Array array);
 
-/* NOTE: deprecated, use void *kf_array_get() and void *kf_array_get_type() instead
-Also, do not ever index arrays directly via []*/
-/* #define KF_ARRAY_GET_PTR(array, index, t) ((t *)( &((array).start[(index) * (array).type_width]) ))
-#define KF_ARRAY_GET(array, index, t) (*KF_ARRAY_GET_PTR(array, index, t)) */
+/* Debug */
+void kfd_array_print(kf_Array array);
 
 
 
@@ -212,53 +199,33 @@ You can unfreeze a string by calling kf_string_unfreeze() and providing an alloc
 You can freeze a string by calling kf_string_freeze()
 */
 #define KF_DEFAULT_STRING_GROW 128
-typedef struct {
-	u8 *cstr;
-	kf_Allocator backing;
-	isize length;
-	isize capacity;
-	isize grow; /* number of bytes to add to capacity on resize */
-} kf_String;
+typedef kf_Array kf_String;
 
 kf_String kf_string_set_from_cstring(u8 *cstr);
-kf_String kf_string_set_from_cstring_length(u8 *cstr, isize length);
-kf_String kf_string_set_from_cstring_length_capacity(u8 *cstr, isize length, isize capacity);
-kf_String kf_string_set_from_cstring_length_capacity_grow(u8 *cstr, isize length, isize capacity, isize grow);
+kf_String kf_string_set_from_cstring_len(u8 *cstr, isize length);
 
-kf_String kf_string_copy_from_cstring(kf_Allocator alloc, u8 *cstr);
-kf_String kf_string_copy_from_cstring_length(kf_Allocator alloc, u8 *cstr, isize length);
-kf_String kf_string_copy_from_cstring_length_capacity(kf_Allocator alloc, u8 *cstr, isize length, isize capacity);
-kf_String kf_string_copy_from_cstring_length_capacity_grow(kf_Allocator alloc, u8 *cstr, isize length, isize capacity, isize grow);
+kf_String kf_string_copy_from_cstring(kf_Allocator alloc, u8 *cstr, isize grow);
+kf_String kf_string_copy_from_cstring_len(kf_Allocator alloc, u8 *cstr, isize len, isize cap, isize grow);
 
 kf_String kf_string_copy_from_string(kf_Allocator alloc, kf_String to_clone);
-kf_String kf_string_copy_from_string_length(kf_Allocator alloc, kf_String to_clone, isize substr_length);
-kf_String kf_string_copy_from_string_length_capacity(kf_Allocator alloc, kf_String to_clone, isize substr_length, isize capacity);
-kf_String kf_string_copy_from_string_length_capacity_grow(kf_Allocator alloc, kf_String to_clone, isize substr_length, isize capacity, isize grow);
+kf_String kf_string_copy_from_string_len(kf_Allocator alloc, kf_String to_clone, isize substr_length, isize capacity, isize grow);
 
-kf_String kf_string_make_length(kf_Allocator alloc, isize length);
-kf_String kf_string_make_length_zeroed(kf_Allocator alloc, isize length);
-kf_String kf_string_make_length_capacity(kf_Allocator alloc, isize length, isize capacity);
-kf_String kf_string_make_length_capacity_zeroed(kf_Allocator alloc, isize length, isize capacity);
-kf_String kf_string_make_length_capacity_grow(kf_Allocator alloc, isize length, isize capacity, isize grow);
-kf_String kf_string_make_length_capacity_grow_zeroed(kf_Allocator alloc, isize length, isize capacity, isize grow);
-
-void kf_string_freeze(kf_String *str);
-void kf_string_unfreeze(kf_String *str, kf_Allocator alloc);
-bool kf_string_is_frozen(kf_String str);
+kf_String kf_string_make(kf_Allocator alloc, isize length, isize capacity, isize grow);
+kf_String kf_string_make_zeroed(kf_Allocator alloc, isize length, isize capacity, isize grow);
 
 isize kf_string_next_capacity(kf_String str);
 void kf_string_resize(kf_String *str, isize new_capacity);
 
-void kf_string_safe_set_char(kf_String *str, isize at, u8 new_char);
-void kf_string_safe_write_cstring_at(kf_String *str, u8 *cstr, isize at);
-void kf_string_safe_write_cstring_at_length(kf_String *str, u8 *cstr, isize at, isize length);
-void kf_string_safe_write_string_at(kf_String *str, kf_String other, isize at);
-void kf_string_safe_write_string_at_length(kf_String *str, kf_String other, isize at, isize length);
+void kf_string_set_char(kf_String *str, isize at, u8 new_char);
+void kf_string_write_cstring_at(kf_String *str, u8 *cstr, isize at);
+void kf_string_write_cstring_at_len(kf_String *str, u8 *cstr, isize at, isize length);
+void kf_string_write_string_at(kf_String *str, kf_String other, isize at);
+void kf_string_write_string_at_len(kf_String *str, kf_String other, isize at, isize length);
 
 void kf_string_append_cstring(kf_String *str, u8 *cstr);
-void kf_string_append_cstring_length(kf_String *str, u8 *cstr, isize length);
+void kf_string_append_cstring_len(kf_String *str, u8 *cstr, isize length);
 void kf_string_append_string(kf_String *str, kf_String other);
-void kf_string_append_string_length(kf_String *str, kf_String other, isize slice_other_upto);
+void kf_string_append_string_len(kf_String *str, kf_String other, isize slice_other_upto);
 /* void kf_string_append_rune(kf_String *str, Rune r, bool null_terminate); */ /* NOTE(ps4star): moved to string util section */
 
 u8 kf_string_pop(kf_String *str);
@@ -266,13 +233,25 @@ void kf_string_clear(kf_String *str);
 
 void kf_string_free(kf_String str);
 
+
+
+
+
+
+
+
+
+
+
+
+
 /* HEAP ALLOCATOR */
 void *kf_heap_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *ptr, isize num_bytes, isize old_size);
 kf_Allocator kf_heap_allocator(void);
 
 /* TEMP (fixed linear buffer) ALLOCATOR */
 typedef struct {
-	u8 *start;
+	u8 *ptr;
 	isize position;
 	isize size;
 	isize num_allocations;

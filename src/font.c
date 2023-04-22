@@ -11,7 +11,8 @@ isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, Rune r)
     }
 
     if (internal_index < 0) {
-        KF_PANIC("kf_lookup_internal_glyph_index_by_rune(): rune not present in given font.");
+        kfd_printf("WARN Rune not found in font: %c", (u8)r);
+        // KF_PANIC("kf_lookup_internal_glyph_index_by_rune(): rune not present in given font.");
     }
     return internal_index;
 }
@@ -42,7 +43,7 @@ void kf_query_system_fonts(kf_Allocator temp_alloc, KF_ARRAY(kf_String) *out)
             break;
         }
 
-		root_as_kf_string = kf_string_set_from_cstring_length(kf_system_font_paths[i], this_strlen); /* e.g. '/usr/share/fonts' */
+		root_as_kf_string = kf_string_set_from_cstring_len(kf_system_font_paths[i], this_strlen); /* e.g. '/usr/share/fonts' */
 
 		/* Recursive read dir */
         kfd_printf("Querying fonts in %s", kf_system_font_paths[i]);
@@ -56,7 +57,7 @@ void kfd_print_system_fonts(KF_ARRAY(kf_String) query_result)
     isize i;
     for (i = 0; i < query_result.length; i++) {
         kf_String *s = kf_array_get(query_result, i);
-        kfd_printf("QUERIED FONT: %s", s->cstr);
+        kfd_printf("QUERIED FONT: %s", s->ptr);
     }
 #endif
 }

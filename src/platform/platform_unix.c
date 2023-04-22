@@ -48,7 +48,7 @@ static const char *_translate_mode(kf_FileMode mode)
 
 kf_FileError kf_file_open(kf_File *file, kf_String path, kf_FileMode mode)
 {
-	file->libc_file = fopen(path.cstr, _translate_mode(mode));
+	file->libc_file = fopen(path.ptr, _translate_mode(mode));
 	if (file->libc_file == NULL) {
 		kfd_printf("WARN: fopen() returned NULL.");
 		return _translate_file_error();
@@ -61,8 +61,8 @@ kf_FileError kf_file_open(kf_File *file, kf_String path, kf_FileMode mode)
 
 kf_String kf_file_read(kf_File file, kf_Allocator str_alloc, isize bytes_to_read, isize at)
 {
-	kf_String out = kf_string_make_length(str_alloc, bytes_to_read);
-	kf_file_read_into_cstring(file, out.cstr, bytes_to_read, at);
+	kf_String out = kf_string_make(str_alloc, bytes_to_read, bytes_to_read, KF_DEFAULT_STRING_GROW);
+	kf_file_read_into_cstring(file, out.ptr, bytes_to_read, at);
 	return out;
 }
 
@@ -80,7 +80,7 @@ bool kf_path_exists(kf_String path)
 {
 	FILE *fp;
 
-	fp = fopen(path.cstr, "r");
+	fp = fopen(path.ptr, "r");
 	if (fp == NULL) {
 		kfd_printf("NOTE: kf_file_exists() returned false");
 		return false;
@@ -108,16 +108,16 @@ u64 kf_file_size(kf_File file)
 
 void kf_read_dir(kf_String path, KF_ARRAY(kf_FileInfo) *entries, kf_Allocator str_alloc)
 {
-	KF_ASSERT(path.cstr != NULL && entries != NULL);
+	KF_ASSERT(path.ptr != NULL && entries != NULL);
 
 	DIR *dir;
 	struct dirent *entry;
 	kf_FileInfo this;
 	kf_String name_as_kf;
 
-	dir = opendir(path.cstr);
+	dir = opendir(path.ptr);
 	while ((entry = readdir(dir)) != NULL) {
-		name_as_kf = 				kf_string_copy_from_cstring(str_alloc, entry->d_name); /* Only the filename */
+		name_as_kf = 				kf_string_copy_from_cstring(str_alloc, entry->d_name, KF_DEFAULT_STRING_GROW); /* Only the filename */
 		kf_String full_path =		kf_join_paths(str_alloc, path, name_as_kf); /* Gets full path by joining dir path to file name */
 
 		this.path =					full_path;
@@ -187,7 +187,7 @@ void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isi
 
 	xinfo->mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
 	XSelectInput(xinfo->display, xinfo->window, xinfo->mask);
-	XStoreName(xinfo->display, xinfo->window, title.cstr);
+	XStoreName(xinfo->display, xinfo->window, title.ptr);
 	XMapWindow(xinfo->display, xinfo->window);
 
 	xinfo->swap_flag = True;

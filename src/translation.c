@@ -13,8 +13,8 @@ void kf_load_translations_from_csv_buffer(kf_Allocator alloc, kf_TranslationReco
 		length = strlen(data);
 	}
 
-	kf_String buf_string = kf_string_make_length_capacity(alloc, 0, 4096); /* gb_string_free() at end */
-	u8 *buf = buf_string.cstr;
+	kf_String buf_string = kf_string_make(alloc, 0, 4096, KF_DEFAULT_STRING_GROW); /* gb_string_free() at end */
+	u8 *buf = buf_string.ptr;
 
 	TranslationLoadPhase phase = TranslationLoadPhase_HEADER;
 	isize num_header_entries = 0;
@@ -37,12 +37,14 @@ void kf_load_translations_from_csv_buffer(kf_Allocator alloc, kf_TranslationReco
 				if (ends_in_delim || ends_in_newline) {
 					/* Perma-allocate the string and add it to langs part of record */
 					if (ends_in_delim) {
-						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 2);
+						isize len = buflen - 2;
+						permanent_buf = kf_string_copy_from_cstring_len(alloc, buf, len, len, KF_DEFAULT_STRING_GROW);
 					} else {
-						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 1);
+						isize len = buflen - 1;
+						permanent_buf = kf_string_copy_from_cstring_len(alloc, buf, len, len, KF_DEFAULT_STRING_GROW);
 					}
 
-					record->lang_keys[record->lang_head++] = permanent_buf.cstr;
+					record->lang_keys[record->lang_head++] = permanent_buf.ptr;
 					kf_string_clear(&buf_string);
 				}
 
@@ -57,13 +59,15 @@ void kf_load_translations_from_csv_buffer(kf_Allocator alloc, kf_TranslationReco
 
 				if (ends_in_delim || ends_in_newline) {
 					if (ends_in_delim) {
-						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 2);
+						isize len = buflen - 2;
+						permanent_buf = kf_string_copy_from_cstring_len(alloc, buf, len, len, KF_DEFAULT_STRING_GROW);
 					} else {
-						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 1);
+						isize len = buflen - 1;
+						permanent_buf = kf_string_copy_from_cstring_len(alloc, buf, len, len, KF_DEFAULT_STRING_GROW);
 					}
 
 					isize index = (record->lang_head * body_index) + lang_offset++;
-					record->values[index] = permanent_buf.cstr;
+					record->values[index] = permanent_buf.ptr;
 					record->num_entries++;
 
 					if (ends_in_newline) {

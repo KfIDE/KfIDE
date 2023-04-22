@@ -1,14 +1,14 @@
 #include "kf.h"
 
 /* C include */
-#include "translation.c"
+#include "mem.c"
+#include "time.c"
 #include "math.c"
-#include "str_util.c"
+#include "translation.c"
 #include "font.c"
 #include "ui.c"
-#include "time.c"
-#include "mem.c"
-#include "highlevel_io.c"
+#include "str_util.c"
+#include "io_util.c"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
@@ -53,14 +53,14 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 
 	/* input string is UTF8 formatted; this writes the Rune[] it represents into the font struct */
 	isize glyphset_length = glyphset.length;
-	out->runes = kf_array_make_capacity(alloc, sizeof(Rune), glyphset_length);
+	out->runes = kf_array_make(alloc, sizeof(Rune), 0, glyphset_length, KF_DEFAULT_GROW);
 
 	kf_decode_utf8_string_to_rune_array(glyphset, &out->runes);
-	kf_array_freeze(&out->runes);
+	kf_freeze(&out->runes);
 
 	/* now we can init our arrays since we know how many runes we'll be needing */
 	isize num_runes = (out->runes).length;
-	out->glyphs = kf_array_make_length_capacity(alloc, sizeof(kf_GlyphInfo), 0, num_runes);
+	out->glyphs = kf_array_make(alloc, sizeof(kf_GlyphInfo), 0, num_runes, KF_DEFAULT_GROW);
 
 	stbtt_InitFont(&out->stb_font, contents.data, 0);
 	f32 scale = stbtt_ScaleForPixelHeight(&out->stb_font, pt_size);
@@ -161,7 +161,7 @@ int main(int argc, char **argv)
 	/* Allocators init */
 	{
 		#define GLOBAL_SIZE		(isize)KF_MEGA(2)
-		#define TEMP_SIZE		(isize)KF_MEGA(2)
+		#define TEMP_SIZE		(isize)KF_MEGA(1)
 		#define UI_SIZE			(isize)KF_KILO(512)
 		/* #define GEN_SIZE		(isize)kf_megabytes(1) */ /* Not cleared each frame; manually clear memory */
 
@@ -192,13 +192,13 @@ int main(int argc, char **argv)
 	/* Font init */
 	kf_free_all(g.temp_alloc); {
 		/* Allocates a KF_ARRAY(kf_String) (inner strings allocated with 2nd param) with paths to system fonts */
-		g.available_fonts_list = kf_array_make_length_capacity(g.heap_alloc, sizeof(kf_String), 0, 512);
+		g.available_fonts_list = kf_array_make(g.heap_alloc, sizeof(kf_String), 0, 512, KF_DEFAULT_GROW);
 
 		kf_query_system_fonts(g.temp_alloc, &g.available_fonts_list);
 		kfd_printf("Initial font query returned %d fonts", (g.available_fonts_list).length);
 		kfd_print_system_fonts(g.available_fonts_list);
 
-		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("/home/ps4star/Documents/eurostile.ttf"), kf_string_set_from_cstring("qwertyuiopasdfghjklzxcvbnm "), 64);
+		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("/home/ps4star/Documents/eurostile.ttf"), kf_string_set_from_cstring("qwertyuiopasdfghjklzxcvbnm "), 16);
 	} kf_free_all(g.temp_alloc);
 
 	while (true) {
@@ -291,7 +291,7 @@ int main(int argc, char **argv)
 				}
 
 				isize text_length = text.length;
-				KF_ARRAY(Rune) runes_to_render = kf_array_make_capacity(g.temp_alloc, sizeof(Rune), text_length);
+				KF_ARRAY(Rune) runes_to_render = kf_array_make(g.temp_alloc, sizeof(Rune), 0, text_length, KF_DEFAULT_GROW);
 
 				kf_decode_utf8_string_to_rune_array(text, &runes_to_render);
 				isize num_runes = runes_to_render.length;
@@ -366,8 +366,7 @@ int main(int argc, char **argv)
 					}
 				}
 
-				/* Reset GL state */
-				{
+				{ /* Reset GL state */
 					glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 					glDisableClientState(GL_VERTEX_ARRAY);
 					glBindTexture(GL_TEXTURE_2D, 0);
