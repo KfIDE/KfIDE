@@ -47,7 +47,7 @@ void kf_query_system_fonts(kf_Allocator temp_alloc, KF_ARRAY(kf_String) *out)
 
 		/* Recursive read dir */
         kfd_printf("Querying fonts in %s", kf_system_font_paths[i]);
-        kf_walk_tree(root_as_kf_string, _query_fonts_callback, temp_alloc, (void *)out, kf_WalkTreeFlag_FILES_ONLY);
+        kf_walk_tree(root_as_kf_string, _query_fonts_callback, temp_alloc, (void *)out, KF_WALK_TREE_FILES_ONLY);
 	}
 }
 

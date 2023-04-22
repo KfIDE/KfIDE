@@ -176,7 +176,7 @@ void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isi
 
 	xinfo->screen = DefaultScreen(xinfo->display);
 
-	if ((flags & kf_VideoFlag_MAXIMIZED) || w < 0 || h < 0) {
+	if ((flags & KF_VIDEO_MAXIMIZED) || w < 0 || h < 0) {
 		final_w = XDisplayWidth(xinfo->display, xinfo->screen);
 		final_h = XDisplayHeight(xinfo->display, xinfo->screen);
 	}

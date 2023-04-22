@@ -179,7 +179,7 @@ int main(int argc, char **argv)
 	/* Gfx init */
 	{
 		g.platform_context = kf_get_platform_specific_context();
-		kf_init_video(g.platform_context, kf_string_set_from_cstring("hmm suspicious"), 0, 0, -1, -1, kf_VideoFlag_MAXIMIZED | kf_VideoFlag_HIDDEN_WINDOW);
+		kf_init_video(g.platform_context, kf_string_set_from_cstring("hmm suspicious"), 0, 0, -1, -1, KF_VIDEO_MAXIMIZED | KF_VIDEO_HIDDEN_WINDOW);
 		kf_set_vsync(g.platform_context, 1);
 	}
 

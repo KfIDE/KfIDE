@@ -345,10 +345,10 @@ void kf_read_dir(kf_String path, KF_ARRAY(kf_FileInfo) *entries, kf_Allocator st
 
 typedef int (*kf_WalkTreeProc)(kf_Allocator temp_alloc, kf_String this_path, void *user);
 typedef enum {
-	kf_WalkTreeFlag_EXCLUDE_DIRS = KF_BIT(0),
-	kf_WalkTreeFlag_EXCLUDE_LINKS = KF_BIT(1),
+	KF_WALK_TREE_EXCLUDE_DIRS = KF_BIT(0),
+	KF_WALK_TREE_EXCLUDE_LINKS = KF_BIT(1),
 
-	kf_WalkTreeFlag_FILES_ONLY = kf_WalkTreeFlag_EXCLUDE_DIRS | kf_WalkTreeFlag_EXCLUDE_LINKS,
+	KF_WALK_TREE_FILES_ONLY = KF_WALK_TREE_EXCLUDE_DIRS | KF_WALK_TREE_EXCLUDE_LINKS,
 } kf_WalkTreeFlags;
 
 void kf_walk_tree(kf_String root_dir, kf_WalkTreeProc callback, kf_Allocator temp_alloc, void *user, kf_WalkTreeFlags flags);
@@ -458,8 +458,8 @@ kf_PlatformSpecificContext kf_get_platform_specific_context(void);
 /* Initializes a window and an OpenGL instance.
 If w || h are -1, uses max size */
 typedef enum {
-	kf_VideoFlag_MAXIMIZED = KF_BIT(0),
-	kf_VideoFlag_HIDDEN_WINDOW = KF_BIT(1),
+	KF_VIDEO_MAXIMIZED = KF_BIT(0),
+	KF_VIDEO_HIDDEN_WINDOW = KF_BIT(1),
 } kf_VideoFlags;
 void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isize y, isize w, isize h, kf_VideoFlags flags);
 /* Set vsync on/off (1 for on, 0 for off, -1 for adaptive (may not work if the -EXT version can't be loaded)) */
