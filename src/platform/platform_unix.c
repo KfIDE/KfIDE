@@ -17,29 +17,29 @@ const u8 kf_path_separator = '/';
 static kf_FileError _translate_file_error(void)
 {
 	if (errno == ENOENT) {
-		return kf_FileError_DOES_NOT_EXIST;
+		return KF_FILE_ERROR_DOES_NOT_EXIST;
 	} else if (errno == EACCES) {
-		return kf_FileError_PERMISSION;
+		return KF_FILE_ERROR_PERMISSION;
 	} else if (errno == EINVAL) {
-		return kf_FileError_INVALID;
+		return KF_FILE_ERROR_INVALID;
 	} else {
-		return kf_FileError_UNSPECIFIED;
+		return KF_FILE_ERROR_UNSPECIFIED;
 	}
 }
 
 static const char *_translate_mode(kf_FileMode mode)
 {
-	if (mode & kf_FileMode_READ) {
+	if (mode & KF_FILE_MODE_READ) {
 		return "r";
-	} else if (mode & kf_FileMode_WRITE) {
+	} else if (mode & KF_FILE_MODE_WRITE) {
 		return "w";
-	} else if (mode & kf_FileMode_READ_WRITE) {
+	} else if (mode & KF_FILE_MODE_READ_WRITE) {
 		return "r+";
-	} else if (mode & kf_FileMode_CREATE) {
+	} else if (mode & KF_FILE_MODE_CREATE) {
 		return "w+";
-	} else if (mode & kf_FileMode_APPEND) {
+	} else if (mode & KF_FILE_MODE_APPEND) {
 		return "a";
-	} else if (mode & kf_FileMode_APPEND_READ) {
+	} else if (mode & KF_FILE_MODE_APPEND_READ) {
 		return "a+";
 	}
 
@@ -55,8 +55,8 @@ kf_FileError kf_file_open(kf_File *file, kf_String path, kf_FileMode mode)
 	}
 
 	file->full_path = path;
-	file->operating_mode = kf_FileMode_READ_WRITE;
-	return kf_FileError_NONE;
+	file->operating_mode = KF_FILE_MODE_READ_WRITE;
+	return KF_FILE_ERROR_NONE;
 }
 
 kf_String kf_file_read(kf_File file, kf_Allocator str_alloc, isize bytes_to_read, isize at)

@@ -290,23 +290,23 @@ void *kf_perma_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *
 /* IO (platform) */
 extern const u8 kf_path_separator;
 typedef enum {
-	kf_FileError_NONE,
-	kf_FileError_INVALID,
-	kf_FileError_INVALID_FILE_NAME,
-	kf_FileError_EXISTS,
-	kf_FileError_DOES_NOT_EXIST,
-	kf_FileError_PERMISSION,
-	kf_FileError_TRUNCATION_FAILURE,
-	kf_FileError_UNSPECIFIED,
+	KF_FILE_ERROR_NONE,
+	KF_FILE_ERROR_INVALID,
+	KF_FILE_ERROR_INVALID_FILE_NAME,
+	KF_FILE_ERROR_EXISTS,
+	KF_FILE_ERROR_DOES_NOT_EXIST,
+	KF_FILE_ERROR_PERMISSION,
+	KF_FILE_ERROR_TRUNCATION_FAILURE,
+	KF_FILE_ERROR_UNSPECIFIED,
 } kf_FileError;
 
 typedef enum {
-	kf_FileMode_READ = KF_BIT(0),
-	kf_FileMode_WRITE = KF_BIT(1),
-	kf_FileMode_READ_WRITE = KF_BIT(2),
-	kf_FileMode_APPEND = KF_BIT(3),
-	kf_FileMode_APPEND_READ = KF_BIT(4),
-	kf_FileMode_CREATE = KF_BIT(5),
+	KF_FILE_MODE_READ = KF_BIT(0),
+	KF_FILE_MODE_WRITE = KF_BIT(1),
+	KF_FILE_MODE_READ_WRITE = KF_BIT(2),
+	KF_FILE_MODE_APPEND = KF_BIT(3),
+	KF_FILE_MODE_APPEND_READ = KF_BIT(4),
+	KF_FILE_MODE_CREATE = KF_BIT(5),
 } kf_FileMode;
 
 typedef struct {

@@ -6,7 +6,7 @@ kf_FileContents kf_file_read_contents(kf_Allocator a, bool null_terminate, kf_St
 
 	result.backing = a;
 
-	if (kf_file_open(&file, path, kf_FileMode_READ) == kf_FileError_NONE) {
+	if (kf_file_open(&file, path, KF_FILE_MODE_READ) == KF_FILE_ERROR_NONE) {
 		u64 file_size = kf_file_size(file);
 		if (file_size > 0) {
 			isize final_len = null_terminate ? file_size+1 : file_size;
