@@ -4,29 +4,127 @@
 #include <GL/gl.h>
 #include <GL/glx.h>
 
+#define _XOPEN_SOURCE 500
+#define __USE_XOPEN_EXTENDED
 #include <sys/types.h>
+#include <stdio.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 
-
 /* IO stuff */
-void kf_read_dir(gbString path, gbArray(kf_FileInfo) entries, gbAllocator str_alloc)
+const u8 kf_path_separator = '/';
+static kf_FileError _translate_file_error(void)
 {
-	GB_ASSERT(path != NULL && entries != NULL);
+	if (errno == ENOENT) {
+		return kf_FileError_DOES_NOT_EXIST;
+	} else if (errno == EACCES) {
+		return kf_FileError_PERMISSION;
+	} else if (errno == EINVAL) {
+		return kf_FileError_INVALID;
+	} else {
+		return kf_FileError_UNSPECIFIED;
+	}
+}
+
+static const char *_translate_mode(kf_FileMode mode)
+{
+	if (mode & kf_FileMode_READ) {
+		return "r";
+	} else if (mode & kf_FileMode_WRITE) {
+		return "w";
+	} else if (mode & kf_FileMode_READ_WRITE) {
+		return "r+";
+	} else if (mode & kf_FileMode_CREATE) {
+		return "w+";
+	} else if (mode & kf_FileMode_APPEND) {
+		return "a";
+	} else if (mode & kf_FileMode_APPEND_READ) {
+		return "a+";
+	}
+
+	KF_PANIC("Invalid mode passed to <linux> _translate_mode()");
+}
+
+kf_FileError kf_file_open(kf_File *file, kf_String path, kf_FileMode mode)
+{
+	file->libc_file = fopen(path.cstr, _translate_mode(mode));
+	if (file->libc_file == NULL) {
+		kfd_printf("WARN: fopen() returned NULL.");
+		return _translate_file_error();
+	}
+
+	file->full_path = path;
+	file->operating_mode = kf_FileMode_READ_WRITE;
+	return kf_FileError_NONE;
+}
+
+kf_String kf_file_read(kf_File file, kf_Allocator str_alloc, isize bytes_to_read, isize at)
+{
+	kf_String out = kf_string_make_length(str_alloc, bytes_to_read);
+	kf_file_read_into_cstring(file, out.cstr, bytes_to_read, at);
+	return out;
+}
+
+void kf_file_read_into_cstring(kf_File file, u8 *buf, isize bytes_to_read, isize at)
+{
+	KF_ASSERT(file.libc_file != NULL && buf != NULL && at > -1 && bytes_to_read > 0);
+
+	u64 old_pos = ftell(file.libc_file);
+	fseek(file.libc_file, at, SEEK_SET);
+	fread(buf, bytes_to_read, 1, file.libc_file);
+	fseek(file.libc_file, old_pos, SEEK_SET);
+}
+
+bool kf_path_exists(kf_String path)
+{
+	FILE *fp;
+
+	fp = fopen(path.cstr, "r");
+	if (fp == NULL) {
+		kfd_printf("NOTE: kf_file_exists() returned false");
+		return false;
+	}
+
+	fclose(fp);
+	return true;
+}
+
+void kf_file_close(kf_File file)
+{
+	KF_ASSERT(file.libc_file != NULL);
+
+	fclose(file.libc_file);
+}
+
+u64 kf_file_size(kf_File file)
+{
+	u64 old_pos = ftell(file.libc_file);
+	fseek(file.libc_file, 0, SEEK_END);
+	u64 size_pos = ftell(file.libc_file);
+	fseek(file.libc_file, old_pos, SEEK_SET);
+	return size_pos;
+}
+
+void kf_read_dir(kf_String path, KF_ARRAY(kf_FileInfo) *entries, kf_Allocator str_alloc)
+{
+	KF_ASSERT(path.cstr != NULL && entries != NULL);
 
 	DIR *dir;
 	struct dirent *entry;
 	kf_FileInfo this;
+	kf_String name_as_kf;
 
-	dir = opendir(path);
+	dir = opendir(path.cstr);
 	while ((entry = readdir(dir)) != NULL) {
-		gbString name_as_gb = 		gb_string_make(str_alloc, entry->d_name); /* Only the filename */
-		gbString full_path =		kf_path_join(str_alloc, path, name_as_gb); /* Gets full path by joining dir path to file name */
+		name_as_kf = 				kf_string_copy_from_cstring(str_alloc, entry->d_name); /* Only the filename */
+		kf_String full_path =		kf_join_paths(str_alloc, path, name_as_kf); /* Gets full path by joining dir path to file name */
 
 		this.path =					full_path;
-		this.is_dir =				(entry->d_type == DT_DIR); /* TODO(psiv): handle other DT_* possibilities */
-		gb_array_append(entries, this);
+		this.is_file =				(entry->d_type == DT_REG);
+		this.is_dir =				(entry->d_type == DT_DIR);
+		this.is_link =				(entry->d_type == DT_LNK);
+		kf_array_append(entries, &this);
 	}
 	closedir(dir);
 }
@@ -64,7 +162,7 @@ kf_PlatformSpecificContext kf_get_platform_specific_context(void)
 }
 
 static void (*glXSwapIntervalEXT)(Display *display, GLXDrawable drawable, int vsync);
-void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, kf_VideoFlags flags)
+void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isize y, isize w, isize h, kf_VideoFlags flags)
 {
 	XInfo *xinfo;
 	int num_returned = 0;
@@ -73,12 +171,12 @@ void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isiz
 	xinfo = ctx;
 	xinfo->display = XOpenDisplay(NULL);
 	if (xinfo->display == NULL) {
-		GB_PANIC("Could not open Xorg display");
+		KF_PANIC("Could not open Xorg display");
 	}
 
 	xinfo->screen = DefaultScreen(xinfo->display);
 
-	if ((flags & KF_VIDEO_MAXIMIZED) || w < 0 || h < 0) {
+	if ((flags & kf_VideoFlag_MAXIMIZED) || w < 0 || h < 0) {
 		final_w = XDisplayWidth(xinfo->display, xinfo->screen);
 		final_h = XDisplayHeight(xinfo->display, xinfo->screen);
 	}
@@ -89,15 +187,15 @@ void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isiz
 
 	xinfo->mask = ExposureMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
 	XSelectInput(xinfo->display, xinfo->window, xinfo->mask);
-	XStoreName(xinfo->display, xinfo->window, title);
+	XStoreName(xinfo->display, xinfo->window, title.cstr);
 	XMapWindow(xinfo->display, xinfo->window);
 
 	xinfo->swap_flag = True;
 	xinfo->fb_configs = glXChooseFBConfig(xinfo->display, DefaultScreen(xinfo->display), double_buf_attributes, &num_returned);
-	GB_ASSERT(num_returned > 0);
+	KF_ASSERT(num_returned > 0);
 	if (xinfo->fb_configs == NULL) { /* resort to single-buffer if DB not available */
 		xinfo->fb_configs = glXChooseFBConfig(xinfo->display, DefaultScreen(xinfo->display), single_buf_attributes, &num_returned);
-		GB_ASSERT(num_returned > 0);
+		KF_ASSERT(num_returned > 0);
 		xinfo->swap_flag = False;
 	}
 
@@ -194,7 +292,8 @@ void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool 
 
 
 /* Define system fonts list */
-const u8 *kf_system_font_paths[] = {
+const u8 *kf_system_font_paths[KF_NUM_SYSTEM_FONT_PATHS] = {
 	"/usr/share/fonts",
 	"/usr/local/share/fonts",
+	"",
 };

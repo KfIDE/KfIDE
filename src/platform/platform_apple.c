@@ -10,6 +10,11 @@ typedef struct {
 	bool exited;
 } MInfo;
 
+typedef enum {
+	thing1 = KF_BIT(0),
+	thing2 = KF_BIT(1),
+};
+
 
 static MInfo minfo;
 
@@ -54,7 +59,7 @@ gbString find_font(gbString font)
 					break;
 				}
 				case 1: {
-					// /Users/<USERNAME>/Library/<FONT>
+					/* /Users/<USERNAME>/Library/<FONT> */
 					break;
 				}
 				case 2: return NULL;
@@ -71,13 +76,13 @@ gbString find_font(gbString font)
 
 void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, kf_VideoFlags flags)
 {
-	// Create the window.
+	/* Create the window. */
 	NSWindowStyleMask window_style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable;
 
 	NSWindow *window = NSWindow_init(NSMakeRect(x, y, w, h), window_style, NSBackingStoreBuffered, false);
 	NSWindow_setTitle(window, title);
 
-	// Prepare to initialize OpenGL
+	/* Prepare to initialize OpenGL */
 	NSOpenGLPixelFormatAttribute attributes[] = {
 		NSOpenGLPFANoRecovery,
 		NSOpenGLPFAAccelerated,

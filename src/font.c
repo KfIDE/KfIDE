@@ -2,44 +2,61 @@ isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, Rune r)
 {
     isize internal_index = -1;
     isize i;
-    for (i = 0; i < gb_array_count(font->runes); i++) {
-        if (font->runes[i] == r) {
+    for (i = 0; i < (font->runes).length; i++) {
+        Rune *this = kf_array_get(font->runes, i);
+        if (*this == r) {
             internal_index = i;
             break;
         }
     }
 
     if (internal_index < 0) {
-        GB_PANIC("kf_lookup_internal_glyph_index_by_rune(): rune not present in given font.");
+        KF_PANIC("kf_lookup_internal_glyph_index_by_rune(): rune not present in given font.");
     }
     return internal_index;
 }
 
 /* kf_system_font_paths should be defined in the platform_* file */
-void kf_query_system_fonts(gbAllocator str_alloc, gbAllocator temp_alloc, gbArray(gbString) out)
+static const u8 KF_TTF_EXT[] =  ".ttf";
+static int _query_fonts_callback(kf_Allocator heap_alloc, kf_Allocator temp_alloc, kf_String this_path, void *user)
 {
-	isize num_system_fonts;
-	isize i;
-	gbString root_as_gb, joined;
+    KF_ARRAY(kf_String) *query_out = user; /* county out */
 
-	num_system_fonts = sizeof(system_fonts) / sizeof(kf_system_font_paths[0]);
-	for (i = 0; i < num_system_fonts; i++) {
-		root_as_gb = gb_string_make(str_alloc, kf_system_font_paths[i]); /* e.g. '/usr/share/fonts' */
+    if (kf_string_ends_with_cstring(this_path, KF_TTF_EXT, strlen(KF_TTF_EXT))) {
+        kf_array_append(query_out, &this_path);
+    }
+    return 0;
+}
+
+void kf_query_system_fonts(kf_Allocator temp_alloc, KF_ARRAY(kf_String) *out)
+{
+	isize i;
+	kf_String root_as_kf_string, joined;
+    isize cur_ent, max_ents;
+    isize this_strlen;
+
+	for (i = 0; i < KF_NUM_SYSTEM_FONT_PATHS; i++) {
+        /* Check if "" */
+        this_strlen = strlen(kf_system_font_paths[i]);
+        if (this_strlen <= 0) {
+            break;
+        }
+
+		root_as_kf_string = kf_string_set_from_cstring_length(kf_system_font_paths[i], this_strlen); /* e.g. '/usr/share/fonts' */
 
 		/* Recursive read dir */
-		isize depth = 0;
-		bool current_is_dir = true;
-		gbString current_path = ;
-		while (true) {
-			// gbArray(kf_FileInfo) entries;
-			// gb_array_init_reserve(entries, temp_alloc, 256);
-			// kf_read_dir(path, entries, temp_alloc);
-
-			if (depth == 0) { /*  */
-
-			}
-		}
-
-		/* joined = kf_join_paths(root_as_gb, ); */
+        kfd_printf("Querying fonts in %s", kf_system_font_paths[i]);
+        kf_walk_tree(root_as_kf_string, _query_fonts_callback, temp_alloc, (void *)out, kf_WalkTreeFlag_FILES_ONLY);
 	}
+}
+
+void kfd_print_system_fonts(KF_ARRAY(kf_String) query_result)
+{
+#ifdef KF_DEBUG
+    isize i;
+    for (i = 0; i < query_result.length; i++) {
+        kf_String *s = kf_array_get(query_result, i);
+        kfd_printf("QUERIED FONT: %s", s->cstr);
+    }
+#endif
 }

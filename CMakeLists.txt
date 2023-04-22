@@ -25,6 +25,10 @@ find_package(OpenGL REQUIRED)
 # target_include_directories(KfIDE PUBLIC ${OPENGL_egl_INCLUDE_DIRS})
 # target_link_libraries(KfIDE ${OPENGL_egl_LIBRARY} ${SILICON_LIBRARY})
 
+if(KF_DEBUG)
+    add_compile_definitions("KF_DEBUG")
+endif()
+
 if(WIN32)
 elseif(APPLE)
 	find_library(FOUNDATION_FW Foundation)

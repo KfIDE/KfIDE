@@ -3,33 +3,30 @@
 /* Parses through .csv data */
 #define TR_DELIM ";;"
 typedef enum { TranslationLoadPhase_HEADER, TranslationLoadPhase_BODY } TranslationLoadPhase;
-void kf_load_translations_from_csv_string(gbAllocator alloc, kf_TranslationRecord *record, u8 *data, isize length)
+void kf_load_translations_from_csv_buffer(kf_Allocator alloc, kf_TranslationRecord *record, u8 *data, isize length)
 {
-	isize i;
-	isize num_header_entries;
-	isize body_index, lang_offset;
-	u8 this_char;
-	gbString buf;
-	gbString permanent_buf; /* we 'leak' mem allocs into this var, but they are copied into the TrRecord anyway so it's fine */
-	TranslationLoadPhase phase;
+	kf_String permanent_buf; /* we 'leak' mem allocs into this var, but they are copied into the TrRecord anyway so it's fine */
 
-	GB_ASSERT(record != NULL && data != NULL);
+	KF_ASSERT(record != NULL && data != NULL);
 
 	if (length < 0) {
 		length = strlen(data);
 	}
 
-	buf = gb_string_make_reserve(alloc, 4096); /* gb_string_free() at end */
+	kf_String buf_string = kf_string_make_length_capacity(alloc, 0, 4096); /* gb_string_free() at end */
+	u8 *buf = buf_string.cstr;
 
-	phase = TranslationLoadPhase_HEADER;
-	num_header_entries = 0;
-	body_index = 0;
-	lang_offset = 0;
+	TranslationLoadPhase phase = TranslationLoadPhase_HEADER;
+	isize num_header_entries = 0;
+	isize body_index = 0;
+	isize lang_offset = 0;
 
+	isize i;
+	u8 this_char;
 	for (i = 0; i < length; i++) {
 		this_char = data[i];
-		gb_string_append_rune(buf, (Rune)this_char);
-		isize buflen = gb_string_length(buf);
+		kf_append_rune_to_string(&buf_string, (Rune)this_char);
+		isize buflen = buf_string.length;
 
 		/*printf("%s\n", buf);*/
 		if (phase == TranslationLoadPhase_HEADER) {
@@ -40,13 +37,13 @@ void kf_load_translations_from_csv_string(gbAllocator alloc, kf_TranslationRecor
 				if (ends_in_delim || ends_in_newline) {
 					/* Perma-allocate the string and add it to langs part of record */
 					if (ends_in_delim) {
-						permanent_buf = gb_string_make_length(alloc, buf, buflen - 2);
+						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 2);
 					} else {
-						permanent_buf = gb_string_make_length(alloc, buf, buflen - 1);
+						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 1);
 					}
 
-					record->lang_keys[record->lang_head++] = permanent_buf;
-					gb_string_clear(buf);
+					record->lang_keys[record->lang_head++] = permanent_buf.cstr;
+					kf_string_clear(&buf_string);
 				}
 
 				if (ends_in_newline) {
@@ -60,13 +57,13 @@ void kf_load_translations_from_csv_string(gbAllocator alloc, kf_TranslationRecor
 
 				if (ends_in_delim || ends_in_newline) {
 					if (ends_in_delim) {
-						permanent_buf = gb_string_make_length(alloc, buf, buflen - 2);
+						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 2);
 					} else {
-						permanent_buf = gb_string_make_length(alloc, buf, buflen - 1);
+						permanent_buf = kf_string_copy_from_cstring_length(alloc, buf, buflen - 1);
 					}
 
 					isize index = (record->lang_head * body_index) + lang_offset++;
-					record->values[index] = permanent_buf;
+					record->values[index] = permanent_buf.cstr;
 					record->num_entries++;
 
 					if (ends_in_newline) {
@@ -74,13 +71,11 @@ void kf_load_translations_from_csv_string(gbAllocator alloc, kf_TranslationRecor
 						body_index++;
 					}
 
-					gb_string_clear(buf);
+					kf_string_clear(&buf_string);
 				}
 			}
 		}
 	}
-
-	gb_string_free(buf);
 }
 
 void kf_tr_select_lang(kf_TranslationRecord *record, u8 *selection)
@@ -95,7 +90,7 @@ void kf_tr_select_lang(kf_TranslationRecord *record, u8 *selection)
 		}
 	}
 	printf("Selected invalid language: %s\n", selection);
-	GB_PANIC("");
+	KF_PANIC("");
 }
 
 u8 *kf_tr_query(kf_TranslationRecord *record, isize index)
@@ -103,19 +98,21 @@ u8 *kf_tr_query(kf_TranslationRecord *record, isize index)
 	isize calculated_index;
 
 	calculated_index = (record->lang_head * index) + record->selected_lang_offset;
-	GB_ASSERT(calculated_index > -1 && calculated_index < record->num_entries);
+	KF_ASSERT(calculated_index > -1 && calculated_index < record->num_entries);
 	return record->values[calculated_index];
 }
 
-void kf_tr_print(kf_TranslationRecord *record)
+void kfd_print_translations(kf_TranslationRecord record)
 {
+#ifdef KF_DEBUG
 	isize i;
 
-	for (i = 0; i < record->lang_head; i++) {
-		printf("%s\n", record->lang_keys[i]);
+	for (i = 0; i < record.lang_head; i++) {
+		printf("%s\n", record.lang_keys[i]);
 	}
 
-	for (i = 0; i < record->num_entries; i++) {
-		printf("%s\n", record->values[i]);
+	for (i = 0; i < record.num_entries; i++) {
+		printf("%s\n", record.values[i]);
 	}
+#endif
 }

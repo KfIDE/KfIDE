@@ -1,8 +1,11 @@
 #pragma once
-#include "gb.h"
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stddef.h>
+#include <string.h>
+
+#include <time.h>
 
 #ifdef KF_PLATFORM_APPLE
 	#define GL_SILENCE_DEPRECATION
@@ -13,7 +16,369 @@
 
 #include "stb_truetype.h"
 
-#define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
+/* #define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__) */
+
+#ifdef KF_DEBUG
+#define kfd_printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
+#else
+/* Do nothing, but force a ';' to exist after usage */
+#define kfd_printf(message, __VA_ARGS__...) do {} while(0)
+#endif
+
+#if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
+	#ifndef KF_CPU_X86
+	#define KF_CPU_X86 1
+	#endif
+	#ifndef KF_CACHE_LINE_SIZE
+	#define KF_CACHE_LINE_SIZE 64
+	#endif
+
+#elif defined(_M_PPC) || defined(__powerpc__) || defined(__powerpc64__)
+	#ifndef KF_CPU_PPC
+	#define KF_CPU_PPC 1
+	#endif
+	#ifndef KF_CACHE_LINE_SIZE
+	#define KF_CACHE_LINE_SIZE 128
+	#endif
+
+#elif defined(__arm__)
+	#ifndef KF_CPU_ARM
+	#define KF_CPU_ARM 1
+	#endif
+	#ifndef KF_CACHE_LINE_SIZE
+	#define KF_CACHE_LINE_SIZE 64
+	#endif
+
+#elif defined(__MIPSEL__) || defined(__mips_isa_rev)
+	#ifndef KF_CPU_MIPS
+	#define KF_CPU_MIPS 1
+	#endif
+	#ifndef KF_CACHE_LINE_SIZE
+	#define KF_CACHE_LINE_SIZE 64
+	#endif
+
+#else
+	#error Unknown CPU Type
+#endif
+
+typedef float f32;
+typedef double f64;
+
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+#define KF_BIT(x) (1<<(x))
+
+#define KF_KILO(x) (       (x) * (i64)(1024))
+#define KF_MEGA(x) (KF_KILO(x) * (i64)(1024))
+#define KF_GIGA(x) (KF_MEGA(x) * (i64)(1024))
+#define KF_TERA(x) (KF_GIGA(x) * (i64)(1024))
+
+typedef size_t usize;
+typedef ptrdiff_t isize;
+
+typedef usize bool;
+#define false ((0 != 0))
+#define true ((0 == 0))
+
+typedef i32 Rune; /* Unicode codepoint */
+#define KF_RUNE_INVALID (Rune)(0xfffd)
+#define KF_RUNE_MAX     (Rune)(0x0010ffff)
+#define KF_RUNE_BOM     (Rune)(0xfeff)
+#define KF_RUNE_EOF     (Rune)(-1)
+
+typedef struct kf_Utf8AcceptRange {
+	u8 lo, hi;
+} kf_Utf8AcceptRange;
+
+#define KF_READONLY_PTR const
+
+
+
+/* MEMORY */
+#define KF_ASSERT(cond) if (!(cond)) do { kfd_printf("Assert failed: %s", #cond); exit(1); } while(0)
+#define KF_ASSERT_NOT_NULL(v) if (!(v)) do { printf("Assert not-null failed"); exit(1); } while(0)
+#define KF_PANIC(msg, __VA_ARGS__...) do { kfd_printf(msg, ## __VA_ARGS__); exit(1); } while(0)
+
+/* void *kf_memcopy(void *dst, void *src, isize n); */
+
+#define KF_DEFAULT_MEMORY_ALIGNMENT 16
+isize kf_align_ceil(isize n);
+
+/* NOTE(ps4sar): this enum is completely unused outside of debug mode; see below */
+typedef enum {
+	kf_AllocatorType_HEAP,
+	kf_AllocatorType_TEMP,
+	kf_AllocatorType_PERMA,
+} kf_AllocatorType;
+
+typedef enum {
+	kf_AllocationType_ALLOC,
+	kf_AllocationType_RESIZE,
+	kf_AllocationType_FREE,
+	kf_AllocationType_FREE_ALL,
+	kf_AllocationType_QUERY_AVAIL_SPACE,
+} kf_AllocationType;
+
+typedef struct {
+	void *allocate;
+	void *user;
+
+#ifdef KF_DEBUG
+	kf_AllocatorType type;
+#endif
+
+} kf_Allocator;
+typedef void *(*kf_AllocatorProc)(kf_Allocator alloc, kf_AllocationType type, void *ptr, isize num_bytes, isize old_size);
+
+void *kf_alloc(kf_Allocator alloc, isize num_bytes);
+void kf_free(kf_Allocator alloc, void *ptr);
+void kf_free_all(kf_Allocator alloc);
+
+/* Debug */
+void kfd_require_allocator_type(kf_Allocator alloc, kf_AllocatorType type_required);
+void kfd_require_allocator_space(kf_Allocator alloc, isize at_least);
+
+
+
+/*
+IMPORTANT NOTE TO CHINZ
+
+If a function will modify the header (or data or anything) on a kf_String of kf_Array,
+then it should take a pointer to that object.
+If it just reads it then it should take an immediate copy not a pointer.
+
+Thamk,
+ps4
+*/
+
+/* ARRAY */
+#define KF_DEFAULT_GROW 32 /* measured in number of elements, not bytes */
+#define KF_ARRAY(t) kf_Array
+typedef struct {
+	u8 *start;
+	kf_Allocator backing;
+	isize type_width;
+	isize length;
+	isize capacity;
+	isize grow;
+} kf_Array;
+
+kf_Array kf_array_make_capacity(kf_Allocator alloc, isize type_width, isize initial_capacity);
+kf_Array kf_array_make_length_capacity(kf_Allocator alloc, isize type_width, isize initial_length, isize initial_capacity);
+kf_Array kf_array_make_length_capacity_grow(kf_Allocator alloc, isize type_width, isize initial_length, isize initial_capacity, isize grow);
+
+kf_Array kf_array_from_ptr(kf_Allocator alloc, void *ptr, isize type_width, isize num_elements);
+kf_Array kf_array_from_ptr_grow(kf_Allocator alloc, void *ptr, isize type_width, isize num_elements, isize grow);
+
+void *kf_array_get(kf_Array array, isize index);
+void *kf_array_get_type(kf_Array array, isize index, isize type_width);
+
+void kf_array_set(kf_Array *array, isize index, u8 *data);
+
+void kf_array_append(kf_Array *array, void *new_element);
+void kf_array_append_multi(kf_Array *array, void *new_elements, isize num);
+void kf_array_pop(kf_Array *array);
+void kf_array_clear(kf_Array *array);
+
+void kf_array_freeze(kf_Array *array);
+void kf_array_unfreeze(kf_Array *array, kf_Allocator alloc);
+bool kf_array_is_frozen(kf_Array array);
+
+void kf_array_free(kf_Array array);
+
+/* NOTE: deprecated, use void *kf_array_get() and void *kf_array_get_type() instead
+Also, do not ever index arrays directly via []*/
+/* #define KF_ARRAY_GET_PTR(array, index, t) ((t *)( &((array).start[(index) * (array).type_width]) ))
+#define KF_ARRAY_GET(array, index, t) (*KF_ARRAY_GET_PTR(array, index, t)) */
+
+
+
+/* STRINGS */
+/* NOTE(ps4star): (this goes for arrays too) pass kf_String* if you're going to WRITE to the str, do kf_String for readonly
+
+This combines frozen and un-frozen (static and dynamic) strings into 1 concept.
+
+A string is "frozen" if (<string>.backing.allocate == NULL).
+It is "unfrozen" if the opposite is true.
+You can unfreeze a string by calling kf_string_unfreeze() and providing an allocator with which to append new chars.
+You can freeze a string by calling kf_string_freeze()
+*/
+#define KF_DEFAULT_STRING_GROW 128
+typedef struct {
+	u8 *cstr;
+	kf_Allocator backing;
+	isize length;
+	isize capacity;
+	isize grow; /* number of bytes to add to capacity on resize */
+} kf_String;
+
+kf_String kf_string_set_from_cstring(u8 *cstr);
+kf_String kf_string_set_from_cstring_length(u8 *cstr, isize length);
+kf_String kf_string_set_from_cstring_length_capacity(u8 *cstr, isize length, isize capacity);
+kf_String kf_string_set_from_cstring_length_capacity_grow(u8 *cstr, isize length, isize capacity, isize grow);
+
+kf_String kf_string_copy_from_cstring(kf_Allocator alloc, u8 *cstr);
+kf_String kf_string_copy_from_cstring_length(kf_Allocator alloc, u8 *cstr, isize length);
+kf_String kf_string_copy_from_cstring_length_capacity(kf_Allocator alloc, u8 *cstr, isize length, isize capacity);
+kf_String kf_string_copy_from_cstring_length_capacity_grow(kf_Allocator alloc, u8 *cstr, isize length, isize capacity, isize grow);
+
+kf_String kf_string_copy_from_string(kf_Allocator alloc, kf_String to_clone);
+kf_String kf_string_copy_from_string_length(kf_Allocator alloc, kf_String to_clone, isize substr_length);
+kf_String kf_string_copy_from_string_length_capacity(kf_Allocator alloc, kf_String to_clone, isize substr_length, isize capacity);
+kf_String kf_string_copy_from_string_length_capacity_grow(kf_Allocator alloc, kf_String to_clone, isize substr_length, isize capacity, isize grow);
+
+kf_String kf_string_make_length(kf_Allocator alloc, isize length);
+kf_String kf_string_make_length_zeroed(kf_Allocator alloc, isize length);
+kf_String kf_string_make_length_capacity(kf_Allocator alloc, isize length, isize capacity);
+kf_String kf_string_make_length_capacity_zeroed(kf_Allocator alloc, isize length, isize capacity);
+kf_String kf_string_make_length_capacity_grow(kf_Allocator alloc, isize length, isize capacity, isize grow);
+kf_String kf_string_make_length_capacity_grow_zeroed(kf_Allocator alloc, isize length, isize capacity, isize grow);
+
+void kf_string_freeze(kf_String *str);
+void kf_string_unfreeze(kf_String *str, kf_Allocator alloc);
+bool kf_string_is_frozen(kf_String str);
+
+isize kf_string_next_capacity(kf_String str);
+void kf_string_resize(kf_String *str, isize new_capacity);
+
+void kf_string_safe_set_char(kf_String *str, isize at, u8 new_char);
+void kf_string_safe_write_cstring_at(kf_String *str, u8 *cstr, isize at);
+void kf_string_safe_write_cstring_at_length(kf_String *str, u8 *cstr, isize at, isize length);
+void kf_string_safe_write_string_at(kf_String *str, kf_String other, isize at);
+void kf_string_safe_write_string_at_length(kf_String *str, kf_String other, isize at, isize length);
+
+void kf_string_append_cstring(kf_String *str, u8 *cstr);
+void kf_string_append_cstring_length(kf_String *str, u8 *cstr, isize length);
+void kf_string_append_string(kf_String *str, kf_String other);
+void kf_string_append_string_length(kf_String *str, kf_String other, isize slice_other_upto);
+/* void kf_string_append_rune(kf_String *str, Rune r, bool null_terminate); */ /* NOTE(ps4star): moved to string util section */
+
+u8 kf_string_pop(kf_String *str);
+void kf_string_clear(kf_String *str);
+
+void kf_string_free(kf_String str);
+
+/* HEAP ALLOCATOR */
+void *kf_heap_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *ptr, isize num_bytes, isize old_size);
+kf_Allocator kf_heap_allocator(void);
+
+/* TEMP (fixed linear buffer) ALLOCATOR */
+typedef struct {
+	u8 *start;
+	isize position;
+	isize size;
+	isize num_allocations;
+} kf_TempAllocatorData;
+
+void kf_init_temp_allocator_data(kf_TempAllocatorData *data, kf_Allocator backing, isize capacity);
+kf_Allocator kf_temp_allocator(kf_TempAllocatorData *data);
+
+void *kf_temp_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *ptr, isize num_bytes, isize old_size);
+
+/* PERMA ALLOCATOR */
+#define KF_PERMA_ALLOCATOR_RECORD_DEFAULT_SIZE 256
+#define KF_PERMA_ALLOCATOR_DEFAULT_BLOCKS_TO_ADD_ON_RESIZE 8
+typedef struct { /* the only real diff. between this and the temp one is this one can do frees and also is expandable */
+	u8 					*blocks;
+	kf_Allocator		backing;
+	isize				block_size;
+	isize				num_blocks;
+	isize				blocks_to_add_on_resize;
+	KF_ARRAY(bool)		block_record; /* indices of free blocks followed by how many */
+} kf_PermaAllocatorData;
+
+void kf_init_perma_allocator_data(kf_PermaAllocatorData *data, kf_Allocator backing, isize initial_num_blocks, isize block_size, isize blocks_to_add_on_resize);
+kf_Allocator kf_perma_allocator(kf_PermaAllocatorData *data);
+
+void *kf_perma_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *ptr, isize num_bytes, isize old_size);
+
+
+
+
+
+
+
+
+
+/* IO (platform) */
+extern const u8 kf_path_separator;
+typedef enum {
+	kf_FileError_NONE,
+	kf_FileError_INVALID,
+	kf_FileError_INVALID_FILE_NAME,
+	kf_FileError_EXISTS,
+	kf_FileError_DOES_NOT_EXIST,
+	kf_FileError_PERMISSION,
+	kf_FileError_TRUNCATION_FAILURE,
+	kf_FileError_UNSPECIFIED,
+} kf_FileError;
+
+typedef enum {
+	kf_FileMode_READ = KF_BIT(0),
+	kf_FileMode_WRITE = KF_BIT(1),
+	kf_FileMode_READ_WRITE = KF_BIT(2),
+	kf_FileMode_APPEND = KF_BIT(3),
+	kf_FileMode_APPEND_READ = KF_BIT(4),
+	kf_FileMode_CREATE = KF_BIT(5),
+} kf_FileMode;
+
+typedef struct {
+	kf_String		full_path;
+	FILE			*libc_file; /* Should be NULL if invalid */
+	kf_FileMode		operating_mode;
+} kf_File;
+
+/* kf_FileError kf_file_open(kf_File *file, kf_String path); */
+kf_FileError kf_file_open(kf_File *file, kf_String path, kf_FileMode mode);
+kf_String kf_file_read(kf_File file, kf_Allocator str_alloc, isize bytes_to_read, isize at);
+void kf_file_read_into_cstring(kf_File file, u8 *buf, isize bytes_to_read, isize at);
+u64 kf_file_size(kf_File file);
+bool kf_path_exists(kf_String path);
+void kf_file_close(kf_File file);
+
+/* Higher-level IO API (std_io.c) */
+typedef struct {
+	kf_Allocator	backing;
+	void      		*data;
+	isize       	size;
+} kf_FileContents;
+
+kf_FileContents kf_file_read_contents(kf_Allocator a, bool null_terminate, kf_String path);
+void kf_file_free_contents(kf_FileContents *contents);
+
+
+typedef struct {
+	kf_String		path;
+	bool			is_file;
+	bool			is_dir;
+	bool			is_link;
+} kf_FileInfo;
+
+void kf_read_dir(kf_String path, KF_ARRAY(kf_FileInfo) *entries, kf_Allocator str_alloc);
+
+typedef int (*kf_WalkTreeProc)(kf_Allocator temp_alloc, kf_String this_path, void *user);
+typedef enum {
+	kf_WalkTreeFlag_EXCLUDE_DIRS = KF_BIT(0),
+	kf_WalkTreeFlag_EXCLUDE_LINKS = KF_BIT(1),
+
+	kf_WalkTreeFlag_FILES_ONLY = kf_WalkTreeFlag_EXCLUDE_DIRS | kf_WalkTreeFlag_EXCLUDE_LINKS,
+} kf_WalkTreeFlags;
+
+void kf_walk_tree(kf_String root_dir, kf_WalkTreeProc callback, kf_Allocator temp_alloc, void *user, kf_WalkTreeFlags flags);
+
+
+
+
+
+
 
 
 
@@ -52,16 +417,31 @@ typedef struct { u8 r, g, b, a; } kf_Color;
 #define KF_RGBA(r, g, b, a) (kf_Color){ (r), (g), (b), (a) }
 #define KF_RGB(r, g, b) KF_RGBA((r), (g), (b), 255)
 
+#define KF_IS_BETWEEN(n, b1, b2) (bool)((n) >= (b1) && (n) <= (b2))
 
 
 
 
-/* STRINGS */
-/* Decode a utf8-formatted string and write into the given gbArray(Rune) */
-void kf_decode_utf8_string_to_rune_array(gbString str, gbArray(Rune) rune_array);
+
+
+
+
+
+/* STRING UTIL */
+
+/* Rune stuff */
+/* Decode a utf8-formatted string and write into the given KF_ARRAY(Rune) */
+void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(Rune) *rune_array);
+void kf_append_rune_to_string(kf_String *str, Rune r);
+
 /* Joins 2 paths and adds in '/' in the middle
 NOTE: This means you cannot put a string that ends with '/' */
-gbString kf_join_paths(gbAllocator join_alloc, gbString base, gbString add);
+kf_String kf_join_paths(kf_Allocator join_alloc, kf_String base, kf_String add);
+/* Returns true if the string ends with the given sub-string, false otherwise */
+bool kf_string_ends_with(kf_String s, kf_String cmp);
+bool kf_string_ends_with_cstring(kf_String s, u8 *cmp, isize cmp_strlen);
+
+
 
 
 
@@ -91,14 +471,6 @@ kf_PlatformSpecificContext kf_get_platform_specific_context(void);
 
 
 
-/* IO (platform) */
-typedef struct {
-	gbString		path;
-	bool			is_dir;
-} kf_FileInfo;
-
-/* read dir */
-void kf_read_dir(gbString path, gbArray(kf_FileInfo) entries, gbAllocator str_alloc);
 
 
 
@@ -107,9 +479,10 @@ void kf_read_dir(gbString path, gbArray(kf_FileInfo) entries, gbAllocator str_al
 /* Initializes a window and an OpenGL instance.
 If w || h are -1, uses max size */
 typedef enum {
-	KF_VIDEO_MAXIMIZED = GB_BIT(0),
+	kf_VideoFlag_MAXIMIZED = KF_BIT(0),
+	kf_VideoFlag_HIDDEN_WINDOW = KF_BIT(1),
 } kf_VideoFlags;
-void kf_init_video(kf_PlatformSpecificContext ctx, gbString title, isize x, isize y, isize w, isize h, kf_VideoFlags flags);
+void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isize y, isize w, isize h, kf_VideoFlags flags);
 /* Set vsync on/off (1 for on, 0 for off, -1 for adaptive (may not work if the -EXT version can't be loaded)) */
 void kf_set_vsync(kf_PlatformSpecificContext ctx, isize vsync);
 /* Resizes the window. */
@@ -138,10 +511,13 @@ void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool 
 
 
 /* FONT LOADING (platform) */
-extern const u8 *kf_system_font_paths[];
+#define KF_NUM_SYSTEM_FONT_PATHS 16
+extern const u8 *kf_system_font_paths[KF_NUM_SYSTEM_FONT_PATHS];
 
 /* Writes list of available system font paths to the array */
-void kf_query_system_fonts(gbAllocator str_alloc, gbAllocator temp_alloc, gbArray(gbString) out);
+void kf_query_system_fonts(kf_Allocator temp_alloc, KF_ARRAY(kf_String) *out);
+/* DEBUG: print out the KF_ARRAY(kf_String) returned by kf_query_system_fonts() */
+void kfd_print_system_fonts(KF_ARRAY(kf_String) query_result);
 
 
 
@@ -157,21 +533,22 @@ so what we do is have that be the stride in the keys/values index
 like if you want to get <nl>[1] where 4 langs are defined and nl has ID 2
 you're looking for values[(4 * 1) + 2]
 */
-#define MAX_TRANSLATION_LANGS 256
-#define MAX_TRANSLATION_ENTRIES 2048
+#define KF_MAX_TRANSLATION_LANGS 256
+#define KF_MAX_TRANSLATION_ENTRIES 2048
 typedef struct {
-	u8 *lang_keys[MAX_TRANSLATION_LANGS];
+	u8 *lang_keys[KF_MAX_TRANSLATION_LANGS];
 
 	u8 *selected_lang;
 	isize selected_lang_offset; /* this and selected_lang are cached together. selected_lang can probably be removed actually, we only use this part */
 	
-	u8 *values[MAX_TRANSLATION_LANGS * MAX_TRANSLATION_ENTRIES];
+	u8 *values[KF_MAX_TRANSLATION_LANGS * KF_MAX_TRANSLATION_ENTRIES];
 	isize lang_head;
 	isize num_entries; /* basically just number of lines of text in the file, excluding header line. NOT total entries of each lang combined */
 } kf_TranslationRecord;
 
 
-void kf_load_translations_from_csv_string(gbAllocator alloc, kf_TranslationRecord *record, u8 *data, isize length);
+void kf_load_translations_from_csv_buffer(kf_Allocator alloc, kf_TranslationRecord *record, u8 *data, isize length);
+void kfd_print_translations(kf_TranslationRecord record);
 
 
 
@@ -187,7 +564,7 @@ So for one you have TTF glyph indices. This is used to call stbtt_*.
 You have to get this by finding the internal index and then getting
 the TTF index out of the kf_GlyphInfo list.
 
-You use the runes gbArray to convert a Rune
+You use the runes KF_ARRAY to convert a Rune
 to an index by finding the index of where that rune is, and then using it
 to index the kf_GlyphInfo array to fetch glyph data like TTF index.
 */
@@ -201,8 +578,8 @@ typedef struct {
 
 typedef struct {
 	stbtt_fontinfo				stb_font;
-	gbArray(Rune) 				runes; /* map Rune -> GlyphInfo index */
-	gbArray(kf_GlyphInfo)		glyphs; /* glyph-specific metrics/data */
+	KF_ARRAY(Rune)				runes; /* map Rune -> GlyphInfo index */
+	KF_ARRAY(kf_GlyphInfo)		glyphs; /* glyph-specific metrics/data */
 
 	isize						ascent, descent, line_gap; /* global font metrics */
 	f32							scale;
@@ -222,45 +599,45 @@ typedef enum { /* which UIDraw* we're dealing with */
 } kf_UIDrawType;
 
 typedef struct { /* use ".common" on the UIDrawCommand union to access this without type-checking */
-	kf_UIDrawType type;
-	kf_Color color;
+	kf_UIDrawType		type;
+	kf_Color			color;
 } kf_UIDrawCommon;
 
 typedef struct { /* rectangle draw (in screen coords) */
-	kf_UIDrawCommon common;
-	kf_IRect rect;
+	kf_UIDrawCommon		common;
+	kf_IRect 			rect;
 } kf_UIDrawRect;
 
 typedef struct { /* text draw (screen coords) */
-	kf_UIDrawCommon common;
-	gbString text;
-	kf_Font *font;
-	kf_IVector2 begin;
+	kf_UIDrawCommon		common;
+	kf_String			text;
+	kf_Font				*font;
+	kf_IVector2			begin;
 } kf_UIDrawText;
 
 typedef union { /* what the user recv's for rendering */
-	kf_UIDrawCommon common;
-	kf_UIDrawRect rect;
-	kf_UIDrawText text;
+	kf_UIDrawCommon		common;
+	kf_UIDrawRect		rect;
+	kf_UIDrawText		text;
 } kf_UIDrawCommand;
 
 typedef struct { /* running UI context (should be in GlobalVars on user side) */
 	/* Input state reference (set in kf_ui_begin()) */
-	kf_EventState *ref_state;
+	kf_EventState						*ref_state;
 
 	/* Main UI processing */
-	gbAllocator begin_allocator;
-	gbArray(kf_UIDrawCommand) draw_commands;
-	gbArray(kf_IRect) origin_stack;
+	kf_Allocator							begin_allocator;
+	KF_ARRAY(kf_UIDrawCommand)			draw_commands;
+	KF_ARRAY(kf_IRect)					origin_stack;
 
 	/* Style */
-	kf_Color color;
-	kf_IRect margin;
-	kf_Font *font;
+	kf_Color							color;
+	kf_IRect							margin;
+	kf_Font								*font;
 } kf_UIContext;
 
 /* Begin the UI session; allocate draw_commands etc */
-void kf_ui_begin(kf_UIContext *ctx, gbAllocator alloc, isize expected_num_draw_commands, kf_EventState *ref_state);
+void kf_ui_begin(kf_UIContext *ctx, kf_Allocator alloc, isize expected_num_draw_commands, kf_EventState *ref_state);
 /* End the UI session; frees memory allocated at _begin() if free_memory is true */
 void kf_ui_end(kf_UIContext *ctx, bool free_memory);
 
@@ -280,4 +657,4 @@ void kf_ui_font(kf_UIContext *ctx, kf_Font *font);
 /* Push rect */
 void kf_ui_rect(kf_UIContext *ctx, kf_IRect rect);
 /* Push text */
-void kf_ui_text(kf_UIContext *ctx, gbString text, isize x, isize y);
+void kf_ui_text(kf_UIContext *ctx, kf_String text, isize x, isize y);
