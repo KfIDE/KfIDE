@@ -26,10 +26,10 @@ static const kf_Utf8AcceptRange kf__utf8_accept_ranges[] = { /* Copied from gb.h
 	{0x80, 0x8f},
 };
 
-isize kf_decode_utf8_single(u8 *str, isize str_len, Rune *codepoint_out) /* Copied from gb.h */
+isize kf_decode_utf8_single(u8 *str, isize str_len, rune *codepoint_out) /* Copied from gb.h */
 {
 	isize width = 0;
-	Rune codepoint = KF_RUNE_INVALID;
+	rune codepoint = KF_RUNE_INVALID;
 
 	if (str_len > 0) {
 		u8 s0 = str[0];
@@ -37,8 +37,8 @@ isize kf_decode_utf8_single(u8 *str, isize str_len, Rune *codepoint_out) /* Copi
 		u8 b1, b2, b3;
 		kf_Utf8AcceptRange accept;
 		if (x >= 0xf0) {
-			Rune mask = ((Rune)x << 31) >> 31;
-			codepoint = ((Rune)s0 & (~mask)) | (KF_RUNE_INVALID & mask);
+			rune mask = ((rune)x << 31) >> 31;
+			codepoint = ((rune)s0 & (~mask)) | (KF_RUNE_INVALID & mask);
 			width = 1;
 			goto end;
 		}
@@ -58,7 +58,7 @@ isize kf_decode_utf8_single(u8 *str, isize str_len, Rune *codepoint_out) /* Copi
 			goto invalid_codepoint;
 
 		if (sz == 2) {
-			codepoint = ((Rune)s0&0x1f)<<6 | ((Rune)b1&0x3f);
+			codepoint = ((rune)s0&0x1f)<<6 | ((rune)b1&0x3f);
 			width = 2;
 			goto end;
 		}
@@ -68,7 +68,7 @@ isize kf_decode_utf8_single(u8 *str, isize str_len, Rune *codepoint_out) /* Copi
 			goto invalid_codepoint;
 
 		if (sz == 3) {
-			codepoint = ((Rune)s0&0x1f)<<12 | ((Rune)b1&0x3f)<<6 | ((Rune)b2&0x3f);
+			codepoint = ((rune)s0&0x1f)<<12 | ((rune)b1&0x3f)<<6 | ((rune)b2&0x3f);
 			width = 3;
 			goto end;
 		}
@@ -77,7 +77,7 @@ isize kf_decode_utf8_single(u8 *str, isize str_len, Rune *codepoint_out) /* Copi
 		if (!KF_IS_BETWEEN(b3, 0x80, 0xbf))
 			goto invalid_codepoint;
 
-		codepoint = ((Rune)s0&0x07)<<18 | ((Rune)b1&0x3f)<<12 | ((Rune)b2&0x3f)<<6 | ((Rune)b3&0x3f);
+		codepoint = ((rune)s0&0x07)<<18 | ((rune)b1&0x3f)<<12 | ((rune)b2&0x3f)<<6 | ((rune)b3&0x3f);
 		width = 4;
 		goto end;
 
@@ -91,11 +91,11 @@ end:
 	return width;
 }
 
-void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(Rune) *rune_array)
+void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(rune) *rune_array)
 {
 	/* Assumes rune_array already initialized */
 	isize this_char, string_length;
-	Rune r = KF_RUNE_INVALID;
+	rune r = KF_RUNE_INVALID;
 
 	string_length = str.length;
 	isize rune_count = 0;
@@ -103,14 +103,14 @@ void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(Rune) *rune_arr
 		this_char += kf_decode_utf8_single(&str.ptr[this_char], (string_length - this_char), &r);
 		KF_ASSERT(r != KF_RUNE_INVALID);
 		kf_array_append(rune_array, &r);
-		/*kfd_printf("IM DECODE %d ::: R DECODE ARR %d ::: OTHER GET %d", r, KF_ARRAY_GET(*rune_array, rune_count, Rune), *((Rune *)(&rune_array->start[4 * rune_count])));*/
+		/*kfd_printf("IM DECODE %d ::: R DECODE ARR %d ::: OTHER GET %d", r, KF_ARRAY_GET(*rune_array, rune_count, rune), *((rune *)(&rune_array->start[4 * rune_count])));*/
 
 		rune_count++;
 	}
 }
 
-/* Rune encoding */
-isize kf_write_rune_as_utf8(u8 buf[4], Rune r) {
+/* rune encoding */
+isize kf_write_rune_as_utf8(u8 buf[4], rune r) {
 	u32 i = (u32)r;
 	u8 mask = 0x3f;
 	if (i <= (1<<7)-1) {
@@ -149,7 +149,7 @@ isize kf_write_rune_as_utf8(u8 buf[4], Rune r) {
 }
 
 /* Encodes rune to utf8 and appends that u8[] to the input string */
-void kf_append_rune_to_string(kf_String *str, Rune r)
+void kf_append_rune_to_string(kf_String *str, rune r)
 {
     if (r >= 0) {
 		u8 buf[8] = {0};

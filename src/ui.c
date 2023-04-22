@@ -110,10 +110,11 @@ void kf_ui_rect(kf_UIContext *ctx, kf_IRect rect)
 void kf_ui_text(kf_UIContext *ctx, kf_String text, isize x, isize y)
 {
 	kf_UIDrawCommand cmd;
+	kf_IRect res = kf_apply_rect_margin(_current_origin_plus(ctx, KF_IRECT(x, y, 0, 0)), ctx->margin);;
 
 	_write_cmd_header(&cmd, KF_DRAW_TEXT, ctx->color);
 	cmd.text.text = text;
 	cmd.text.font = ctx->font; KF_ASSERT(ctx->font != NULL);
-	cmd.text.begin = (kf_IVector2){ x, y };
+	cmd.text.begin = (kf_IVector2){ res.x, res.y };
 	_push_cmd(ctx, cmd);
 }

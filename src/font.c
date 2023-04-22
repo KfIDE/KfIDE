@@ -1,9 +1,9 @@
-isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, Rune r)
+isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, rune r)
 {
     isize internal_index = -1;
     isize i;
     for (i = 0; i < (font->runes).length; i++) {
-        Rune *this = kf_array_get(font->runes, i);
+        rune *this = kf_array_get(font->runes, i);
         if (*this == r) {
             internal_index = i;
             break;
@@ -11,7 +11,7 @@ isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, Rune r)
     }
 
     if (internal_index < 0) {
-        kfd_printf("WARN Rune not found in font: %c", (u8)r);
+        kfd_printf("WARN rune not found in font: %c", (u8)r);
         // KF_PANIC("kf_lookup_internal_glyph_index_by_rune(): rune not present in given font.");
     }
     return internal_index;

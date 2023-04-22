@@ -25,7 +25,7 @@ void kf_load_translations_from_csv_buffer(kf_Allocator alloc, kf_TranslationReco
 	u8 this_char;
 	for (i = 0; i < length; i++) {
 		this_char = data[i];
-		kf_append_rune_to_string(&buf_string, (Rune)this_char);
+		kf_append_rune_to_string(&buf_string, (rune)this_char);
 		isize buflen = buf_string.length;
 
 		/*printf("%s\n", buf);*/

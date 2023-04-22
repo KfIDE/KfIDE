@@ -81,18 +81,22 @@ typedef uint64_t u64;
 #define KF_GIGA(x) (KF_MEGA(x) * (i64)(1024))
 #define KF_TERA(x) (KF_GIGA(x) * (i64)(1024))
 
+#ifndef usize
 typedef size_t usize;
 typedef ptrdiff_t isize;
+#endif
 
+#ifndef bool
 typedef usize bool;
 #define false ((0 != 0))
 #define true ((0 == 0))
+#endif
 
-typedef i32 Rune; /* Unicode codepoint */
-#define KF_RUNE_INVALID (Rune)(0xfffd)
-#define KF_RUNE_MAX     (Rune)(0x0010ffff)
-#define KF_RUNE_BOM     (Rune)(0xfeff)
-#define KF_RUNE_EOF     (Rune)(-1)
+typedef i32 rune; /* Unicode codepoint */
+#define KF_RUNE_INVALID (rune)(0xfffd)
+#define KF_RUNE_MAX     (rune)(0x0010ffff)
+#define KF_RUNE_BOM     (rune)(0xfeff)
+#define KF_RUNE_EOF     (rune)(-1)
 
 typedef struct kf_Utf8AcceptRange {
 	u8 lo, hi;
@@ -226,7 +230,7 @@ void kf_string_append_cstring(kf_String *str, u8 *cstr);
 void kf_string_append_cstring_len(kf_String *str, u8 *cstr, isize length);
 void kf_string_append_string(kf_String *str, kf_String other);
 void kf_string_append_string_len(kf_String *str, kf_String other, isize slice_other_upto);
-/* void kf_string_append_rune(kf_String *str, Rune r, bool null_terminate); */ /* NOTE(ps4star): moved to string util section */
+/* void kf_string_append_rune(kf_String *str, rune r, bool null_terminate); */ /* NOTE(ps4star): moved to string util section */
 
 u8 kf_string_pop(kf_String *str);
 void kf_string_clear(kf_String *str);
@@ -408,10 +412,10 @@ typedef struct { u8 r, g, b, a; } kf_Color;
 
 /* STRING UTIL */
 
-/* Rune stuff */
-/* Decode a utf8-formatted string and write into the given KF_ARRAY(Rune) */
-void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(Rune) *rune_array);
-void kf_append_rune_to_string(kf_String *str, Rune r);
+/* rune stuff */
+/* Decode a utf8-formatted string and write into the given KF_ARRAY(rune) */
+void kf_decode_utf8_string_to_rune_array(kf_String str, KF_ARRAY(rune) *rune_array);
+void kf_append_rune_to_string(kf_String *str, rune r);
 
 /* Joins 2 paths and adds in '/' in the middle
 NOTE: This means you cannot put a string that ends with '/' */
@@ -465,7 +469,7 @@ void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isi
 /* Set vsync on/off (1 for on, 0 for off, -1 for adaptive (may not work if the -EXT version can't be loaded)) */
 void kf_set_vsync(kf_PlatformSpecificContext ctx, isize vsync);
 /* Resizes the window. */
-/*void kf_resize_window(kf_PlatformSpecificContext ctx, isize w, isize h);*/
+void kf_resize_window(kf_PlatformSpecificContext ctx, isize w, isize h);
 /* Writes window size to isize ptrs */
 void kf_write_window_size(kf_PlatformSpecificContext ctx, isize *w, isize *h);
 /* Flushes everything drawn with OpenGL to the buffer. */
@@ -519,7 +523,7 @@ typedef struct {
 
 	u8 *selected_lang;
 	isize selected_lang_offset; /* this and selected_lang are cached together. selected_lang can probably be removed actually, we only use this part */
-	
+
 	u8 *values[KF_MAX_TRANSLATION_LANGS * KF_MAX_TRANSLATION_ENTRIES];
 	isize lang_head;
 	isize num_entries; /* basically just number of lines of text in the file, excluding header line. NOT total entries of each lang combined */
@@ -543,7 +547,7 @@ So for one you have TTF glyph indices. This is used to call stbtt_*.
 You have to get this by finding the internal index and then getting
 the TTF index out of the kf_GlyphInfo list.
 
-You use the runes KF_ARRAY to convert a Rune
+You use the runes KF_ARRAY to convert a rune
 to an index by finding the index of where that rune is, and then using it
 to index the kf_GlyphInfo array to fetch glyph data like TTF index.
 */
@@ -552,12 +556,12 @@ typedef struct {
 	GLuint						gl_tex; /* gl text */
 	int							ax, lsb;
 	isize						x1, y1; /* x and y offsets */
-	int							index; /* ttf glyph index */ 
+	int							index; /* ttf glyph index */
 } kf_GlyphInfo;
 
 typedef struct {
 	stbtt_fontinfo				stb_font;
-	KF_ARRAY(Rune)				runes; /* map Rune -> GlyphInfo index */
+	KF_ARRAY(rune)				runes; /* map rune -> GlyphInfo index */
 	KF_ARRAY(kf_GlyphInfo)		glyphs; /* glyph-specific metrics/data */
 
 	isize						ascent, descent, line_gap; /* global font metrics */
@@ -565,7 +569,7 @@ typedef struct {
 } kf_Font;
 
 /* Returns internal (within kf_Font) index of the rune */
-isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, Rune r);
+isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, rune r);
 
 
 
@@ -614,6 +618,17 @@ typedef struct { /* running UI context (should be in GlobalVars on user side) */
 	kf_IRect							margin;
 	kf_Font								*font;
 } kf_UIContext;
+
+
+typedef struct {
+	kf_FileInfo io_info; /* should have a "file name" string in here */
+	u8 *display;
+	kf_String content;
+} kf_EditBox;
+
+
+/* */
+void kf_ui_init_menubars(kf_PlatformSpecificContext ctx, kf_Allocator allocator, KF_ARRAY(kf_EditBox) *opened_tabs, isize *currently_opened_tab);
 
 /* Begin the UI session; allocate draw_commands etc */
 void kf_ui_begin(kf_UIContext *ctx, kf_Allocator alloc, isize expected_num_draw_commands, kf_EventState *ref_state);

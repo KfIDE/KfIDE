@@ -217,7 +217,7 @@ void kf_array_free(kf_Array array)
 void kfd_array_print(kf_Array array)
 {
 #ifdef KF_DEBUG
-    kfd_printf("\nARRAY DATA:\nSTART %p\nELSIZE %d\nLENGTH %d\nEL %s", array.ptr, array.type_width, array.length, (u8 *)kf_array_get(array, 0));
+    kfd_printf("\nARRAY DATA:\nSTART %p\nELSIZE %ld\nLENGTH %ld\nEL %s", array.ptr, array.type_width, array.length, (u8 *)kf_array_get(array, 0));
 #endif
 }
 
@@ -431,7 +431,7 @@ void *kf_temp_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *p
         /* Sub-allocate within buffer */
         isize new_pos = data->position + aligned_bytes;
         if (new_pos >= data->size) {
-            kfd_printf("<temp> Could not ALLOC: it exceeds max size!\nBuffer size: %d K\nMax avail: %d B\nYou wanted: %d B", data->size / KF_KILO(1), (data->size - data->position), aligned_bytes);
+            kfd_printf("<temp> Could not ALLOC: it exceeds max size!\nBuffer size: %d K\nMax avail: %d B\nYou wanted: %lld B", data->size / KF_KILO(1), (data->size - data->position), aligned_bytes);
             KF_PANIC();
         }
 

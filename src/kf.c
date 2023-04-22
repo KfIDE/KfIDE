@@ -34,6 +34,9 @@ typedef struct {
 	kf_Font canon_editing_font;
 
 	kf_Font font_std32;
+
+	KF_ARRAY(kf_EditBox) opened_tabs;
+	isize currently_opened_tab;
 } GlobalVars;
 static GlobalVars g;
 
@@ -43,7 +46,7 @@ static GlobalVars g;
 void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc, kf_String path, kf_String glyphset, isize pt_size)
 {
 	if (!kf_path_exists(path)) {
-		kfd_printf("Error: '%s' doesn't exist", path);
+		kfd_printf("Error: '%s' doesn't exist", path.ptr);
 	}
 
 	kf_FileContents contents = kf_file_read_contents(alloc, true, path);
@@ -51,9 +54,9 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 		KF_PANIC("kf_load_ttf_font(): invalid file path given.");
 	}
 
-	/* input string is UTF8 formatted; this writes the Rune[] it represents into the font struct */
+	/* input string is UTF8 formatted; this writes the rune[] it represents into the font struct */
 	isize glyphset_length = glyphset.length;
-	out->runes = kf_array_make(alloc, sizeof(Rune), 0, glyphset_length, KF_DEFAULT_GROW);
+	out->runes = kf_array_make(alloc, sizeof(rune), 0, glyphset_length, KF_DEFAULT_GROW);
 
 	kf_decode_utf8_string_to_rune_array(glyphset, &out->runes);
 	kf_freeze(&out->runes);
@@ -109,7 +112,7 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 		kf_array_append(&out->glyphs, &(kf_GlyphInfo){0});
 		kf_GlyphInfo *this_glyph = kf_array_get(out->glyphs, i);
 
-		int glyph_index = stbtt_FindGlyphIndex(&out->stb_font, *(Rune *)kf_array_get(out->runes, i));
+		int glyph_index = stbtt_FindGlyphIndex(&out->stb_font, *(rune *)kf_array_get(out->runes, i));
 		this_glyph->index = glyph_index;
 
 		int ax, lsb;
@@ -155,6 +158,14 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 }
 
 
+kf_IVector2 kf_center_rect(kf_IRect largerRect, kf_IRect smallerRect) {
+	kf_IVector2 res;
+    res.x = (isize)((largerRect.w - smallerRect.w) / 2) + largerRect.x;
+    res.y = (isize)((largerRect.h - smallerRect.h) / 2) + largerRect.y;
+
+    return res;
+}
+
 
 int main(int argc, char **argv)
 {
@@ -179,8 +190,10 @@ int main(int argc, char **argv)
 	/* Gfx init */
 	{
 		g.platform_context = kf_get_platform_specific_context();
-		kf_init_video(g.platform_context, kf_string_set_from_cstring("hmm suspicious"), 0, 0, -1, -1, KF_VIDEO_MAXIMIZED | KF_VIDEO_HIDDEN_WINDOW);
+		kf_init_video(g.platform_context, kf_string_set_from_cstring("hmm suspicious"), 0, 0, -1, -1, KF_VIDEO_MAXIMIZED);
 		kf_set_vsync(g.platform_context, 1);
+
+		kf_ui_init_menubars(g.platform_context, g.heap_alloc, &g.opened_tabs, &g.currently_opened_tab);
 	}
 
 	/* Translations init */
@@ -195,11 +208,17 @@ int main(int argc, char **argv)
 		g.available_fonts_list = kf_array_make(g.heap_alloc, sizeof(kf_String), 0, 512, KF_DEFAULT_GROW);
 
 		kf_query_system_fonts(g.temp_alloc, &g.available_fonts_list);
-		kfd_printf("Initial font query returned %d fonts", (g.available_fonts_list).length);
+		kfd_printf("Initial font query returned %ld fonts", (g.available_fonts_list).length);
 		kfd_print_system_fonts(g.available_fonts_list);
 
-		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("/home/ps4star/Documents/eurostile.ttf"), kf_string_set_from_cstring("qwertyuiopasdfghjklzxcvbnm "), 16);
+		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("res/eurostile.ttf"), kf_string_set_from_cstring("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM 1234567890-=!@#$%^&*()_+[]{};'\\:\"|,./<>?`~§±"), 16);
 	} kf_free_all(g.temp_alloc);
+
+	/* Other global initializations. */
+	{
+		g.opened_tabs = kf_array_make(g.heap_alloc, sizeof(kf_EditBox), 0, 8, 8);
+		g.currently_opened_tab = -1;
+	}
 
 	while (true) {
 		kf_analyze_events(g.platform_context, &g.event_state, true);
@@ -214,7 +233,10 @@ int main(int argc, char **argv)
 		/* Gfx start */
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+		#ifdef KF_PLATFORM_LINUX /* NOTE(EimaMei): linux sucks */
 		glViewport(0, 0, g.win_bounds.w, g.win_bounds.h);
+		#endif
 
 		/* UI */
 		{
@@ -224,9 +246,10 @@ int main(int argc, char **argv)
 
 			/* UI BEGIN */
 			kf_ui_begin(ui, g.ui_alloc, 196, &g.event_state); {
-				kf_ui_push_origin(ui, 10, 0); {
+				kf_ui_push_origin(ui, 0, 0); {
+					/*
 					kf_ui_color(ui, KF_RGBA(255, 255, 255, 255));
-					kf_ui_rect(ui, KF_IRECT(0, 0, 200, 200 ));
+					kf_ui_rect(ui, KF_IRECT(0, 0, 200, 200));
 
 					kf_ui_color(ui, KF_RGBA(255, 0, 0, 255));
 					kf_ui_rect(ui, KF_IRECT(20, 20, 40, 40));
@@ -234,6 +257,32 @@ int main(int argc, char **argv)
 					kf_ui_color(ui, KF_RGBA(255, 0, 0, 255));
 					kf_ui_font(ui, &g.font_std32);
 					kf_ui_text(ui, debug_text, 0, 0);
+					*/
+					for (isize i = 0; i < g.opened_tabs.length; i++) {
+						if (i == g.currently_opened_tab)
+							kf_ui_color(ui, KF_RGB(128, 128, 128));
+						else
+							kf_ui_color(ui, KF_RGB(64, 64, 64));
+
+						kf_EditBox *tab = kf_array_get(g.opened_tabs, i);
+
+						kf_ui_rect(ui, KF_IRECT(64 * i, 0, 64, 32));
+
+						kf_IVector2 txt_pos = kf_center_rect(KF_IRECT(64 * i, 0, 64, 32), KF_IRECT(0, 0, 0, 16)); /* NOTE(EimaMei): Replace width with the text's actual width. */
+						kf_ui_color(ui, KF_RGB(255, 255, 255));
+						kf_ui_font(ui, &g.font_std32);
+						kf_ui_text(ui, kf_string_set_from_cstring(tab->display), 64 * i + 8, txt_pos.y);
+					}
+				} kf_ui_pop_origin(ui);
+
+				kf_ui_push_origin(ui, 100, 100); {
+					if (g.currently_opened_tab != -1) {
+						kf_EditBox *tab = kf_array_get(g.opened_tabs, g.currently_opened_tab);
+
+						kf_ui_color(ui, KF_RGB(255, 255, 255));
+						kf_ui_font(ui, &g.font_std32);
+						kf_ui_text(ui, tab->content, 0, 0);
+					}
 				} kf_ui_pop_origin(ui);
 			} kf_ui_end(ui, false);
 		}
@@ -258,7 +307,8 @@ int main(int argc, char **argv)
 
 				glColor4b(color.r >> 1, color.g >> 1, color.b >> 1, color.a >> 1);
 				glRectf(rect_as_uv.x, rect_as_uv.y, rect_as_uv.x2, rect_as_uv.y2);
-			} break;
+				break;
+			}
 
 			case KF_DRAW_TEXT: {
 				kf_UIDrawText *text_cmd = &cmd->text;
@@ -284,14 +334,14 @@ int main(int argc, char **argv)
 					glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
 					glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_TEXTURE);
 					glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
-					
+
 					/* Client state setup */
 					glEnableClientState(GL_VERTEX_ARRAY);
 					glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 				}
 
 				isize text_length = text.length;
-				KF_ARRAY(Rune) runes_to_render = kf_array_make(g.temp_alloc, sizeof(Rune), 0, text_length, KF_DEFAULT_GROW);
+				KF_ARRAY(rune) runes_to_render = kf_array_make(g.temp_alloc, sizeof(rune), 0, text_length, KF_DEFAULT_GROW);
 
 				kf_decode_utf8_string_to_rune_array(text, &runes_to_render);
 				isize num_runes = runes_to_render.length;
@@ -299,18 +349,18 @@ int main(int argc, char **argv)
 				isize rune_index;
 				kf_IVector2 text_pos = begin;
 
-				Rune *this_rune_ptr, *next_rune_ptr; /* next_rune is the next rune in the string to kern against */
+				rune *this_rune_ptr, *next_rune_ptr; /* next_rune is the next rune in the string to kern against */
 				for (rune_index = 0; rune_index < num_runes; rune_index++) {
 					/*
 					Text rendering steps:
-					1) Grab internal index from Rune (this is used to reference other data in the Font struct)
-					2) Grab texture id from the Font struct for the Rune
+					1) Grab internal index from rune (this is used to reference other data in the Font struct)
+					2) Grab texture id from the Font struct for the rune
 					3) Render the texture
 					*/
 
 					this_rune_ptr = kf_array_get(runes_to_render, rune_index);
 
-					/* Step 1 - look up index by Rune */
+					/* Step 1 - look up index by rune */
 					isize this_rune_internal_index = kf_lookup_internal_glyph_index_by_rune(font, *this_rune_ptr);
 					KF_ASSERT(this_rune_internal_index > -1);
 
@@ -338,7 +388,7 @@ int main(int argc, char **argv)
 						GLubyte indices[] = {0,1,2, /* first triangle (bottom left - top left - top right) */
 											0,2,3}; /* second triangle (bottom left - top right - bottom right) */
 
-						
+
 						glVertexPointer(3, GL_FLOAT, 0, Vertices);
 						glTexCoordPointer(2, GL_FLOAT, 0, TexCoord);
 
@@ -374,12 +424,11 @@ int main(int argc, char **argv)
 					glDisable(GL_BLEND);
 					glDisable(GL_TEXTURE_2D);
 				}
-			} break;
+				break;
+			}
 			}
 		}
 
-		glFlush();
-		glFinish();
 		kf_swap_buffers(g.platform_context);
 
 		kf_free_all(g.temp_alloc); /* clear temp buffer every frame (can grow infinitely if this isn't called periodically) */
