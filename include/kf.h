@@ -382,8 +382,9 @@ typedef struct {
 	f32 x, y, x2, y2;
 } kf_UVRect;
 
-#define KF_IRECT(x, y, w, h) (kf_IRect){ (x), (y), (w), (h) }
-#define KF_UVRECT(x, y, x2, y2) (kf_UVRect){ (x), (y), (x2), (y2) }
+#define KF_IVECTOR2(x, y) (kf_IVector2){x, y}
+#define KF_IRECT(x, y, w, h) (kf_IRect){x, y, w, h}
+#define KF_UVRECT(x, y, x2, y2) (kf_UVRect){x, y, x2, y2}
 
 /* Applies a margin rect to a rect.
 For example: r={ 10, 10, 20, 20 } and margin={ 1, 2, 5, 5 }
@@ -485,6 +486,7 @@ typedef struct {
 	bool was_window_resized;
 	isize window_resize_width, window_resize_height;
 	isize mouse_x, mouse_y, mouse_xrel, mouse_yrel;
+	isize mousewheel_y;
 } kf_EventState;
 
 /* Grabs events and sets kf_EventState accordingly
@@ -561,16 +563,12 @@ typedef struct {
 
 typedef struct {
 	stbtt_fontinfo				stb_font;
-	KF_ARRAY(rune)				runes; /* map rune -> GlyphInfo index */
 	KF_ARRAY(kf_GlyphInfo)		glyphs; /* glyph-specific metrics/data */
 
 	isize						ascent, descent, line_gap; /* global font metrics */
 	f32							scale;
+	isize                       size; /* NOTE(EimaMei): This is given by the user itself. */
 } kf_Font;
-
-/* Returns internal (within kf_Font) index of the rune */
-isize kf_lookup_internal_glyph_index_by_rune(kf_Font *font, rune r);
-
 
 
 
@@ -624,6 +622,7 @@ typedef struct {
 	kf_FileInfo io_info; /* should have a "file name" string in here */
 	u8 *display;
 	kf_String content;
+	isize scroll_offset
 } kf_EditBox;
 
 

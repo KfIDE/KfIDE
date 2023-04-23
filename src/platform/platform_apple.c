@@ -12,7 +12,7 @@
 #define local_array_size(array) sizeof(array) / sizeof(*array) // For convenience sake.
 
 typedef struct {
-	kf_Allocator heap_alloc;
+	kf_Allocator alloc;
 
 	NSWindow *window;
 	NSOpenGLContext *opengl_ctx;
@@ -149,49 +149,118 @@ void kf_read_dir(kf_String path, KF_ARRAY(kf_FileInfo) *entries, kf_Allocator st
 /* =============== Window stuffz ===============     */
 
 
+isize kf_file_dialog_search(KF_ARRAY(const char*) filetypes, const char *starting_path, const char **out_file) {
+	NSOpenPanel *openFileDialog = malloc_class(NSOpenPanel);
+
+	/* NOTE(EimaMei): convert KF_ARRAY to siArray cuz it's better trolleybus. */
+	if (filetypes.length != 0) {
+		siArray(const char*) value = si_array_init_reserve(si_sizeof(*value), filetypes.length);
+
+		for (isize i = 0; i < filetypes.length; i++) {
+			value[i] = kf_array_get(filetypes, i);
+		}
+		NSOpenPanel_setAllowedFileTypes(openFileDialog, value);
+		si_array_free(value);
+	}
+
+	NSURL *url;
+	if (starting_path == NULL) {
+		siArray(const char*) directories = NSSearchPathForDirectoriesInDomains(NSDesktopDirectory, NSUserDomainMask, true);
+		url = NSURL_fileURLWithPath(directories[0]);
+		si_array_free(directories);
+	}
+	else {
+		url = NSURL_fileURLWithPath(starting_path);
+	}
+
+ 	NSOpenPanel_setCanCreateDirectories(openFileDialog, true);
+	NSOpenPanel_setDirectoryURL(openFileDialog, url);
+
+	NSModalResponse response = NSOpenPanel_runModal(openFileDialog);
+
+	if (response == NSModalResponseOK) {
+		*out_file = NSURL_path(NSOpenPanel_URL(openFileDialog));
+	}
+
+	release(openFileDialog);
+
+	return response;
+}
+
+
 
 static CVReturn display_callback(CVDisplayLinkRef displayLink, const CVTimeStamp *inNow, const CVTimeStamp *inOutputTime, CVOptionFlags flagsIn, CVOptionFlags *flagsOut, void *displayLinkContext)
 {
 	return kCVReturnSuccess;
 }
 
-static bool on_window_close()
+static bool on_window_close(id self)
 {
-	minfo.exited = 1;
+	/* NOTE(EimaMei): Only set the `exited` flag if the main window is closed. */
+	if (self == minfo.window) {
+		minfo.exited = 1;
+	}
+
 	return true;
 }
 
 // Define all of the functions that'll be activated when the menu item gets clicked.
-void file_new() {
+void file_new()
+{
 	printf("MainMenu/File/New\n");
 }
 
 void file_open() {
 	KF_ARRAY(kf_EditBox) *opened_tabs = minfo.opened_tabs;
+	char *opened_file = NULL;
+	char *short_name = NULL;
+
+	kf_Array temp;
+	temp.length = 0;
+
+	kf_file_dialog_search(temp, NULL, &opened_file);
+
+	if (opened_file == NULL)
+		return ;
+
+	for (isize j = strlen(opened_file); j > -1; j--) {
+		if (opened_file[j] == kf_path_separator) {
+			short_name = &opened_file[j + 1];
+			break;
+		}
+	}
+
+	for (isize i = 0; i < opened_tabs->length; i++) {
+		kf_EditBox *tab = kf_array_get(*opened_tabs, i);
+		if (strcmp(tab->io_info.path.ptr, opened_file) == 0) { /* Since it's already opened, we'll just set it as the currently opened tab instead. */
+			*minfo.currently_opened_tab = i;
+			return ;
+		}
+	}
 
 	kf_EditBox new_file;
 	/* io_info */
-	new_file.io_info.path = kf_string_copy_from_cstring(minfo.heap_alloc, "/Users/eimamei/Desktop/KfIDE/LICENSE", KF_DEFAULT_GROW);
+	new_file.io_info.path = kf_string_copy_from_cstring(minfo.alloc, opened_file, KF_DEFAULT_GROW);
 	new_file.io_info.is_dir = false;
 	new_file.io_info.is_link = false;
 	new_file.io_info.is_file = true;
 
 	/* display */
-	new_file.display = malloc(strlen("LICENSE") + 1);
-	strcpy(new_file.display, "LICENSE");
+	new_file.display = malloc(strlen(short_name) + 1);
+	strcpy(new_file.display, short_name);
 
 	/* content */
 	kf_File file;
 	kf_FileError error = kf_file_open(&file, new_file.io_info.path, KF_FILE_MODE_READ);
 
-	if (error == KF_FILE_ERROR_NONE) {
-		new_file.content = kf_file_read(file, minfo.heap_alloc, kf_file_size(file), 0);
+	if (file.libc_file != NULL) {
+		new_file.content = kf_file_read(file, minfo.alloc, kf_file_size(file), 0);
 		kf_file_close(file);
 	}
 
 	*minfo.currently_opened_tab = opened_tabs->length;
 
-	printf("MainMenu/File/Open - %li tabs opened\n", opened_tabs->length);
+	printf("MainMenu/File/Open - %s - %li tabs opened\n", opened_file, opened_tabs->length);
 	kf_array_append(opened_tabs, &new_file);
 }
 void file_close() { printf("MainMenu/File/Close\n"); }
@@ -363,6 +432,10 @@ void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool 
 	NSApplication_updateWindows(NSApp);
 
 	out->exited = minfo.exited;
+
+	if (NSEvent_type(e) == NSEventTypeScrollWheel) {
+		out->mousewheel_y = (isize)NSEvent_deltaY(e);
+	}
 }
 
 
@@ -388,15 +461,24 @@ void kf_ui_init_menubars(kf_PlatformSpecificContext ctx, kf_Allocator allocator,
 	si_func_to_SEL(SI_DEFAULT, edit_select_all);
 
 	// Get the executable name.
-	const char* process_name = NSProcessInfo_processName(NSProcessInfo_processInfo());
+	char* process_name = (char*)NSProcessInfo_processName(NSProcessInfo_processInfo());
 
 	// Create and set the main menubar
 	NSMenu* main_menu = autorelease(malloc_class(NSMenu));
 	NSApplication_setMainMenu(NSApp, main_menu);
 
-	minfo.heap_alloc = allocator;
+	minfo.alloc = allocator;
 	minfo.opened_tabs = opened_tabs;
 	minfo.currently_opened_tab = currently_opened_tab;
+
+	/* Temporary '<noun/verb> variables fro the menu items.' */
+	kf_String about_process = kf_string_copy_from_cstring(allocator, "About ", KF_DEFAULT_GROW);
+	kf_String hide_process = kf_string_copy_from_cstring(allocator, "Hide ", KF_DEFAULT_GROW);
+	kf_String quit_process = kf_string_copy_from_cstring(allocator, "Quit ", KF_DEFAULT_GROW);
+
+	kf_string_append_cstring(&about_process, process_name);
+	kf_string_append_cstring(&hide_process,  process_name);
+	kf_string_append_cstring(&quit_process,  process_name);
 
 	// The items for each of our menus ('<Executable name>', 'File', 'Edit', 'View', 'Windows' and 'Help')
 	// '<Executable name>' items
@@ -406,15 +488,16 @@ void kf_ui_init_menubars(kf_PlatformSpecificContext ctx, kf_Allocator allocator,
 		 any existing class method as an argument, which is why 'orderFrontStandardAboutPanel' shows information
 		 about the app (even though it's technically "undefined").
 		*/
-		NSMenuItem_init("About", selector(orderFrontStandardAboutPanel), ""),
+		NSMenuItem_init(about_process.ptr, selector(orderFrontStandardAboutPanel), ""),
 		NSMenuItem_separatorItem(), // Adds a separator dash between the menu items.
 		NSMenuItem_init("Services", nil, ""), // Define this for later.
-		NSMenuItem_init("Hide", selector(hide), "h"), // The same 'orderFrontStandardAboutPanel' behaviour happens for everything below (apart from the separator).
+		NSMenuItem_init(hide_process.ptr, selector(hide), "h"), // The same 'orderFrontStandardAboutPanel' behaviour happens for everything below (apart from the separator).
 		NSMenuItem_init("Hide Other", selector(hideOtherApplications), "h"),
 		NSMenuItem_init("Show All", selector(unhideAllApplications), ""),
 		NSMenuItem_separatorItem(),
-		NSMenuItem_init("Quit", selector(terminate), "q")
+		NSMenuItem_init(quit_process.ptr, selector(terminate), "q")
 	};
+
 
 	NSMenuItem* file_items[] = {
 		NSMenuItem_init("New", selector(file_new), "n"),
@@ -435,6 +518,12 @@ void kf_ui_init_menubars(kf_PlatformSpecificContext ctx, kf_Allocator allocator,
 		NSMenuItem_init("Select all", selector(edit_select_all), "a")
 	};
 
+	NSMenuItem* terminal_items[] = {
+		NSMenuItem_init("New Terminal", selector(edit_undo), "`"),
+		NSMenuItem_init("Split Terminal", selector(edit_undo), "\\"),
+	};
+	NSMenuItem_setKeyEquivalentModifierMask(terminal_items[0], NSEventModifierFlagShift | NSEventModifierFlagControl);
+
 
 	// Now we create the menus themselves.
 	// '<Process name>' menu
@@ -452,15 +541,20 @@ void kf_ui_init_menubars(kf_PlatformSpecificContext ctx, kf_Allocator allocator,
 	// 'View' menu
 	create_submenu(main_menu, "View", nil, 0); // For whatever reason, MacOS turns a "View" titled menu automatically into a View menu.
 
-	// 'Windows' menu
-	NSMenu* windows_menu = create_submenu(main_menu, "Windows", nil, 0);
-	NSApplication_setWindowsMenu(NSApp, windows_menu); // Set our menu into a Windows menu.
+	create_submenu(main_menu, "Terminal", terminal_items, local_array_size(terminal_items));
+
+	// 'Window' menu
+	NSMenu* window_menu = create_submenu(main_menu, "Window", nil, 0);
+	NSApplication_setWindowsMenu(NSApp, window_menu); // Set our menu into a Windows menu.
+
 
 	// 'Help' menu
 	NSMenu* help_menu = create_submenu(main_menu, "Help", nil, 0);
 	NSApplication_setHelpMenu(NSApp, help_menu); // Set our menu into a Help menu.
 
-	NSApplication_finishLaunching(NSApp);
+	kf_string_free(about_process);
+	kf_string_free(hide_process);
+	kf_string_free(quit_process);
 }
 
 

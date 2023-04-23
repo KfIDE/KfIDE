@@ -39,7 +39,7 @@ elseif(APPLE)
 
 	target_link_libraries(KfIDE ${FOUNDATION_FW} ${FOUNDATION_FW} ${OPENGL_FW} ${APPKIT_FW} ${COREVIDEO_FW})
 	include_directories(/usr/local/include)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -L/usr/local/lib -lSilicon")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -L/usr/local/lib -lSilicon -Wno-pointer-sign")
 elseif(UNIX)
     find_package(X11 REQUIRED)
     target_include_directories(KfIDE PUBLIC ${X11_INCLUDE_DIRS})

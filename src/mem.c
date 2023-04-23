@@ -1,3 +1,5 @@
+#include "kf.h" /* NOTE(EimaMei): vscode stfu */
+
 /*
 if align is 16
 if n is     42
@@ -344,6 +346,14 @@ void kf_string_append_cstring_len(kf_String *str, u8 *cstr, isize length)
 
     memcpy(&str->ptr[str->length], cstr, length);
     str->length = new_length;
+
+    /*
+        NOTE (EimaMei):
+        According 📖✍ to my 🗑️ statistics ➗, only a small 👌⬇ percentage ➗ of people 👨 that program 🖥️ in C 🇨 actually 😳 know how to properly manage memory ✔,
+        so if you 🤔👄👈 end 🔚 up ☝ learning 🐩 C 💾, consider 🤔 learning not to forget the basics of creating strings in C 📬, it's free 🆓, and you 👈 can always 🔥
+        change 🚼 your 👉 mind 🤯. Enjoy 🌟💯 the code 📹.
+    */
+    str->ptr[new_length] = '\0';
 }
 
 void kf_string_append_string(kf_String *str, kf_String other)
@@ -402,7 +412,7 @@ void *kf_heap_allocator_proc(kf_Allocator alloc, kf_AllocationType type, void *p
         KF_PANIC();
 
     }
-    
+
     return out;
 }
 

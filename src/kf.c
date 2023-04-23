@@ -1,3 +1,4 @@
+#define KF_PLATFORM_APPLE
 #include "kf.h"
 
 /* C include */
@@ -43,7 +44,7 @@ static GlobalVars g;
 
 
 
-void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc, kf_String path, kf_String glyphset, isize pt_size)
+void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc, kf_String path, kf_IVector2 glyphset, isize pt_size)
 {
 	if (!kf_path_exists(path)) {
 		kfd_printf("Error: '%s' doesn't exist", path.ptr);
@@ -54,19 +55,13 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 		KF_PANIC("kf_load_ttf_font(): invalid file path given.");
 	}
 
-	/* input string is UTF8 formatted; this writes the rune[] it represents into the font struct */
-	isize glyphset_length = glyphset.length;
-	out->runes = kf_array_make(alloc, sizeof(rune), 0, glyphset_length, KF_DEFAULT_GROW);
-
-	kf_decode_utf8_string_to_rune_array(glyphset, &out->runes);
-	kf_freeze(&out->runes);
-
 	/* now we can init our arrays since we know how many runes we'll be needing */
-	isize num_runes = (out->runes).length;
+	isize num_runes = glyphset.y - glyphset.x;
 	out->glyphs = kf_array_make(alloc, sizeof(kf_GlyphInfo), 0, num_runes, KF_DEFAULT_GROW);
 
 	stbtt_InitFont(&out->stb_font, contents.data, 0);
 	f32 scale = stbtt_ScaleForPixelHeight(&out->stb_font, pt_size);
+	out->size = pt_size;
 
 	/* idk if we actually need to do any of the stuff in this block or not */
 	{
@@ -112,7 +107,7 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 		kf_array_append(&out->glyphs, &(kf_GlyphInfo){0});
 		kf_GlyphInfo *this_glyph = kf_array_get(out->glyphs, i);
 
-		int glyph_index = stbtt_FindGlyphIndex(&out->stb_font, *(rune *)kf_array_get(out->runes, i));
+		int glyph_index = stbtt_FindGlyphIndex(&out->stb_font, i);
 		this_glyph->index = glyph_index;
 
 		int ax, lsb;
@@ -193,7 +188,7 @@ int main(int argc, char **argv)
 		kf_init_video(g.platform_context, kf_string_set_from_cstring("hmm suspicious"), 0, 0, -1, -1, KF_VIDEO_MAXIMIZED);
 		kf_set_vsync(g.platform_context, 1);
 
-		kf_ui_init_menubars(g.platform_context, g.heap_alloc, &g.opened_tabs, &g.currently_opened_tab);
+		kf_ui_init_menubars(g.platform_context, g.global_alloc, &g.opened_tabs, &g.currently_opened_tab);
 	}
 
 	/* Translations init */
@@ -211,7 +206,7 @@ int main(int argc, char **argv)
 		kfd_printf("Initial font query returned %ld fonts", (g.available_fonts_list).length);
 		kfd_print_system_fonts(g.available_fonts_list);
 
-		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("res/eurostile.ttf"), kf_string_set_from_cstring("qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM 1234567890-=!@#$%^&*()_+[]{};'\\:\"|,./<>?`~§±"), 16);
+		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("res/eurostile.ttf"), KF_IVECTOR2(0, 255), 32);
 	} kf_free_all(g.temp_alloc);
 
 	/* Other global initializations. */
@@ -220,12 +215,30 @@ int main(int argc, char **argv)
 		g.currently_opened_tab = -1;
 	}
 
+	//#define KF_PRINT_ALLOCS
+
 	while (true) {
 		kf_analyze_events(g.platform_context, &g.event_state, true);
 
 		kf_EventState *e = &g.event_state;
 		if (e->exited) {
 			break;
+		}
+
+		/* NOTE(EimaMei): Prints how much memory is allocated out of the available limit in kilobytes. */
+		{
+			#ifdef KF_DEBUG
+			#ifdef KF_PRINT_ALLOCS
+			kf_TempAllocatorData *alloc_data = (kf_TempAllocatorData *)g.global_alloc.user;
+			printf("MEMORY ALLOCATIONS:\n\tGlobal alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
+
+			alloc_data = (kf_TempAllocatorData *)g.temp_alloc.user;
+			printf("\tsTemp alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
+
+			alloc_data = (kf_TempAllocatorData *)g.ui_alloc.user;
+			printf("\tUI alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
+			#endif
+			#endif
 		}
 
 		kf_write_window_size(g.platform_context, &g.win_bounds.w, &g.win_bounds.h);
@@ -258,30 +271,33 @@ int main(int argc, char **argv)
 					kf_ui_font(ui, &g.font_std32);
 					kf_ui_text(ui, debug_text, 0, 0);
 					*/
+
 					for (isize i = 0; i < g.opened_tabs.length; i++) {
-						if (i == g.currently_opened_tab)
+						if (i == g.currently_opened_tab) {
 							kf_ui_color(ui, KF_RGB(128, 128, 128));
-						else
+						}
+						else {
 							kf_ui_color(ui, KF_RGB(64, 64, 64));
+						}
+						kf_ui_rect(ui, KF_IRECT(128 * i, 0, 128, 32));
 
 						kf_EditBox *tab = kf_array_get(g.opened_tabs, i);
 
-						kf_ui_rect(ui, KF_IRECT(64 * i, 0, 64, 32));
-
-						kf_IVector2 txt_pos = kf_center_rect(KF_IRECT(64 * i, 0, 64, 32), KF_IRECT(0, 0, 0, 16)); /* NOTE(EimaMei): Replace width with the text's actual width. */
+						kf_IVector2 txt_pos = kf_center_rect(KF_IRECT(128 * i, 0, 128, 32), KF_IRECT(0, 0, 0, g.font_std32.size)); /* NOTE(EimaMei): Replace width with the text's actual width. */
 						kf_ui_color(ui, KF_RGB(255, 255, 255));
 						kf_ui_font(ui, &g.font_std32);
-						kf_ui_text(ui, kf_string_set_from_cstring(tab->display), 64 * i + 8, txt_pos.y);
+						kf_ui_text(ui, kf_string_set_from_cstring(tab->display), 128 * i + 8, txt_pos.y);
 					}
 				} kf_ui_pop_origin(ui);
 
 				kf_ui_push_origin(ui, 100, 100); {
 					if (g.currently_opened_tab != -1) {
 						kf_EditBox *tab = kf_array_get(g.opened_tabs, g.currently_opened_tab);
+						tab->scroll_offset += e->mousewheel_y;
 
 						kf_ui_color(ui, KF_RGB(255, 255, 255));
 						kf_ui_font(ui, &g.font_std32);
-						kf_ui_text(ui, tab->content, 0, 0);
+						kf_ui_text(ui, tab->content, 0, tab->scroll_offset);
 					}
 				} kf_ui_pop_origin(ui);
 			} kf_ui_end(ui, false);
@@ -357,15 +373,21 @@ int main(int argc, char **argv)
 					2) Grab texture id from the Font struct for the rune
 					3) Render the texture
 					*/
-
 					this_rune_ptr = kf_array_get(runes_to_render, rune_index);
 
-					/* Step 1 - look up index by rune */
-					isize this_rune_internal_index = kf_lookup_internal_glyph_index_by_rune(font, *this_rune_ptr);
-					KF_ASSERT(this_rune_internal_index > -1);
+					if (*this_rune_ptr == '\n') {
+						text_pos.x = begin.x;
+						text_pos.y += font->size;
+						continue;
+					}
 
 					/* Step 2 */
-					kf_GlyphInfo *this_glyph = kf_array_get(font->glyphs, this_rune_internal_index);
+					kf_GlyphInfo *this_glyph = kf_array_get(font->glyphs, *this_rune_ptr);
+
+					if (*this_rune_ptr == '\t') {
+						text_pos.x += this_glyph->width;
+						continue;
+					}
 
 					/* Step 3a - calculate pixel box for text */
 					kf_IRect text_box = KF_IRECT(text_pos.x, text_pos.y, this_glyph->width, this_glyph->height);
@@ -376,17 +398,22 @@ int main(int argc, char **argv)
 					{ /* GL render */
 						glBindTexture(GL_TEXTURE_2D, this_glyph->gl_tex);
 
-						GLfloat Vertices[] = {(float)uv.x, (float)uv.y, 0,
-											(float)uv.x2, (float)uv.y, 0,
-											(float)uv.x2, (float)uv.y2, 0,
-											(float)uv.x, (float)uv.y2, 0};
-						GLfloat TexCoord[] = {0, 0,
-											1, 0,
-											1, 1,
-											0, 1,
+						GLfloat Vertices[] = {
+							(float)uv.x,  (float)uv.y,  0,
+							(float)uv.x2, (float)uv.y,  0,
+							(float)uv.x2, (float)uv.y2, 0,
+							(float)uv.x,  (float)uv.y2, 0
 						};
-						GLubyte indices[] = {0,1,2, /* first triangle (bottom left - top left - top right) */
-											0,2,3}; /* second triangle (bottom left - top right - bottom right) */
+						GLfloat TexCoord[] = {
+							0, 0,
+							1, 0,
+							1, 1,
+							0, 1,
+						};
+						GLubyte indices[] = {
+							0, 1, 2, /* first triangle (bottom left - top left - top right) */
+							0, 2, 3 /* second triangle (bottom left - top right - bottom right) */
+						};
 
 
 						glVertexPointer(3, GL_FLOAT, 0, Vertices);
@@ -399,10 +426,6 @@ int main(int argc, char **argv)
 					if (rune_index + 1 < num_runes) {
 						next_rune_ptr = kf_array_get(runes_to_render, rune_index + 1);
 
-						/* Grab internal index for next_rune, so we can add kerning later without using codepoints directly */
-						isize next_rune_internal_index = kf_lookup_internal_glyph_index_by_rune(font, *next_rune_ptr);
-						KF_ASSERT(next_rune_internal_index > -1);
-
 						/* Add const spacing */
 						f32 scale = font->scale;
 						int ax = this_glyph->ax;
@@ -410,7 +433,7 @@ int main(int argc, char **argv)
 						text_pos.x += roundf(ax * scale);
 
 						/* Add kerning */
-						kf_GlyphInfo *next_glyph_info = kf_array_get(font->glyphs, next_rune_internal_index);
+						kf_GlyphInfo *next_glyph_info = kf_array_get(font->glyphs, *next_rune_ptr);
 						int kern = stbtt_GetGlyphKernAdvance(&font->stb_font, (int)this_glyph->index, (int)next_glyph_info->index);
 						text_pos.x += roundf(kern * scale);
 					}
