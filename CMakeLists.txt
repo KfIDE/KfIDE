@@ -30,6 +30,7 @@ if(KF_DEBUG)
 endif()
 
 if(WIN32)
+    target_link_libraries(KfIDE ${OPENGL_LIBRARY})
 elseif(APPLE)
 	find_library(FOUNDATION_FW Foundation)
 	find_library(OPENGL_FW OpenGL)

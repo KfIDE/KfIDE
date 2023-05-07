@@ -7,22 +7,36 @@
 
 #include <time.h>
 
+#ifndef uint8_t
+	#include <stdint.h>
+#endif
+
+#undef KF_PLATFORM_WIN32
+#define KF_PLATFORM_WIN32
+
 #ifdef KF_PLATFORM_APPLE
 	#define GL_SILENCE_DEPRECATION
 	#include <OpenGL/gl.h>
 #else
-	#include <GL/gl.h>
+	#ifdef KF_PLATFORM_WIN32
+		#include <windows.h>
+		#include <GL/gl.h>
+		#include <GL/glext.h>
+		#include <GL/wgl.h>
+	#else
+		#include <GL/gl.h>
+	#endif
 #endif
 
 #include "stb_truetype.h"
 
-/* #define printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__) */
+/* #define printf(message, ...) printf("%s:%i: " message "\n", __FILE__, __LINE__, __VA_ARGS__) */
 
 #ifdef KF_DEBUG
-#define kfd_printf(message, __VA_ARGS__...) printf("%s:%i: " message "\n", __FILE__, __LINE__, ## __VA_ARGS__)
+#define kfd_printf(message, ...) printf("%s:%i: " message "\n", __FILE__, __LINE__, __VA_ARGS__)
 #else
 /* Do nothing, but force a ';' to exist after usage */
-#define kfd_printf(message, __VA_ARGS__...) do {} while(0)
+#define kfd_printf(message, ...) do {} while(0)
 #endif
 
 #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
@@ -107,7 +121,7 @@ typedef struct kf_Utf8AcceptRange {
 /* MEMORY */
 #define KF_ASSERT(cond) if (!(cond)) do { kfd_printf("Assert failed: %s", #cond); exit(1); } while(0)
 #define KF_ASSERT_NOT_NULL(v) if (!(v)) do { printf("Assert not-null failed"); exit(1); } while(0)
-#define KF_PANIC(msg, __VA_ARGS__...) do { kfd_printf(msg, ## __VA_ARGS__); exit(1); } while(0)
+#define KF_PANIC(msg, ...) do { kfd_printf(msg, __VA_ARGS__); exit(1); } while(0)
 
 /* void *kf_memcopy(void *dst, void *src, isize n); */
 
@@ -622,7 +636,7 @@ typedef struct {
 	kf_FileInfo io_info; /* should have a "file name" string in here */
 	u8 *display;
 	kf_String content;
-	isize scroll_offset
+	isize scroll_offset;
 } kf_EditBox;
 
 
@@ -642,7 +656,7 @@ void kf_ui_pop_origin(kf_UIContext *ctx);
 /* Set color to use for future UI element pushes */
 void kf_ui_color(kf_UIContext *ctx, kf_Color color);
 /* Set margin to use for future UI element pushes */
-static const kf_IRect KF_NO_MARGIN = (kf_IRect){ 0, 0, 0, 0 };
+//const kf_IRect KF_NO_MARGIN = {0, 0, 0, 0};
 void kf_ui_margin(kf_UIContext *ctx, kf_IRect margin);
 /* Set font to use for future UI text elements */
 void kf_ui_font(kf_UIContext *ctx, kf_Font *font);

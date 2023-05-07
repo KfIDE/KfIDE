@@ -1,4 +1,3 @@
-#define KF_PLATFORM_APPLE
 #include "kf.h"
 
 /* C include */
@@ -144,7 +143,7 @@ void kf_load_ttf_font(kf_Font *out, kf_Allocator alloc, kf_Allocator temp_alloc,
 		glGenTextures(1, &gl_tex);
 		glBindTexture(GL_TEXTURE_2D, gl_tex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, glyph_w, glyph_h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, bitmap);
-		glGenerateMipmap(GL_TEXTURE_2D);
+		//glGenerateMipmap(GL_TEXTURE_2D);
 
 		this_glyph->gl_tex = gl_tex;
 	}
@@ -180,6 +179,10 @@ int main(int argc, char **argv)
 		g.temp_alloc = kf_temp_allocator(&g.temp_backing);
 		kf_init_temp_allocator_data(&g.ui_backing, g.heap_alloc, UI_SIZE);
 		g.ui_alloc = kf_temp_allocator(&g.ui_backing);
+
+		#ifdef KF_DEBUG
+			printf("Allocators successfully have been initialized\n");
+		#endif
 	}
 
 	/* Gfx init */
@@ -188,13 +191,23 @@ int main(int argc, char **argv)
 		kf_init_video(g.platform_context, kf_string_set_from_cstring("hmm suspicious"), 0, 0, -1, -1, KF_VIDEO_MAXIMIZED);
 		kf_set_vsync(g.platform_context, 1);
 
-		kf_ui_init_menubars(g.platform_context, g.global_alloc, &g.opened_tabs, &g.currently_opened_tab);
+		#ifdef KF_PLATFORM_APPLE
+			kf_ui_init_menubars(g.platform_context, g.global_alloc, &g.opened_tabs, &g.currently_opened_tab);
+		#endif
+
+		#ifdef KF_DEBUG
+			printf("GFX successfully have been initialized\n");
+		#endif
 	}
 
 	/* Translations init */
 	{
 		static const char *test_str = "en;;nl\nTEST;;TEST";
 		kf_load_translations_from_csv_buffer(g.global_alloc, &g.translation_record, (u8 *)test_str, strlen(test_str));
+
+		#ifdef KF_DEBUG
+			printf("Translations successfully have been initialized\n");
+		#endif
 	}
 
 	/* Font init */
@@ -207,12 +220,20 @@ int main(int argc, char **argv)
 		kfd_print_system_fonts(g.available_fonts_list);
 
 		kf_load_ttf_font(&g.font_std32, g.global_alloc, g.temp_alloc, kf_string_set_from_cstring("res/eurostile.ttf"), KF_IVECTOR2(0, 255), 32);
+
+		#ifdef KF_DEBUG
+			printf("Fonts successfully have been initialized\n");
+		#endif
 	} kf_free_all(g.temp_alloc);
 
 	/* Other global initializations. */
 	{
 		g.opened_tabs = kf_array_make(g.heap_alloc, sizeof(kf_EditBox), 0, 8, 8);
 		g.currently_opened_tab = -1;
+
+		#ifdef KF_DEBUG
+			printf("Other global initializations successfully have been initialized\n");
+		#endif
 	}
 
 	//#define KF_PRINT_ALLOCS
@@ -228,27 +249,27 @@ int main(int argc, char **argv)
 		/* NOTE(EimaMei): Prints how much memory is allocated out of the available limit in kilobytes. */
 		{
 			#ifdef KF_DEBUG
-			#ifdef KF_PRINT_ALLOCS
-			kf_TempAllocatorData *alloc_data = (kf_TempAllocatorData *)g.global_alloc.user;
-			printf("MEMORY ALLOCATIONS:\n\tGlobal alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
+				#ifdef KF_PRINT_ALLOCS
+					kf_TempAllocatorData *alloc_data = (kf_TempAllocatorData *)g.global_alloc.user;
+					printf("MEMORY ALLOCATIONS:\n\tGlobal alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
 
-			alloc_data = (kf_TempAllocatorData *)g.temp_alloc.user;
-			printf("\tsTemp alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
+					alloc_data = (kf_TempAllocatorData *)g.temp_alloc.user;
+					printf("\tsTemp alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
 
-			alloc_data = (kf_TempAllocatorData *)g.ui_alloc.user;
-			printf("\tUI alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
-			#endif
+					alloc_data = (kf_TempAllocatorData *)g.ui_alloc.user;
+					printf("\tUI alloc - %lld/%lld KB\n", alloc_data->position / KF_KILO(1), alloc_data->size / KF_KILO(1));
+				#endif
 			#endif
 		}
 
-		kf_write_window_size(g.platform_context, &g.win_bounds.w, &g.win_bounds.h);
 
 		/* Gfx start */
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 		#ifdef KF_PLATFORM_LINUX /* NOTE(EimaMei): linux sucks */
-		glViewport(0, 0, g.win_bounds.w, g.win_bounds.h);
+			kf_write_window_size(g.platform_context, &g.win_bounds.w, &g.win_bounds.h);
+			glViewport(0, 0, g.win_bounds.w, g.win_bounds.h);
 		#endif
 
 		/* UI */
@@ -458,5 +479,7 @@ int main(int argc, char **argv)
 		kf_free_all(g.ui_alloc);
 	}
 	kf_terminate_video(g.platform_context);
+	printf("KfIDE has quit\n");
+
 	return 0;
 }

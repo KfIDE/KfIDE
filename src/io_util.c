@@ -37,8 +37,8 @@ NOTE: NO ORDER GUARANTEED!
 user should be able to handle the returned files in ANY order */
 void kf_walk_tree(kf_String root_dir, kf_WalkTreeProc callback, kf_Allocator temp_alloc, void *user, kf_WalkTreeFlags flags)
 {
-	static const isize initial_cap = 2048;
-	static const isize min_avail_size = sizeof(kf_FileInfo)*initial_cap;
+	const isize initial_cap = 2048;
+	const isize min_avail_size = sizeof(kf_FileInfo) * initial_cap;
 
 	kfd_require_allocator_type(temp_alloc,		KF_ALLOC_TEMP);
 	kfd_require_allocator_space(temp_alloc,		min_avail_size);

@@ -366,12 +366,15 @@ void kf_init_video(kf_PlatformSpecificContext ctx, kf_String title, isize x, isi
 
 	NSOpenGLContext_makeCurrentContext(context);
 	NSWindow_setContentView(window, (NSView*)view);
+
+	if (flags & KF_VIDEO_MAXIMIZED || (w == -1 && h == -1))
+	{
+		NSWindow_setFrameAndDisplay(window, NSScreen_visibleFrame(NSScreen_mainScreen()), true, false);
+	}
+
 	NSWindow_setIsVisible(window, true);
 	NSWindow_makeMainWindow(window);
 
-	if (flags & KF_VIDEO_MAXIMIZED) {
-		NSWindow_setFrameAndDisplay(window, NSScreen_visibleFrame(NSScreen_mainScreen()), true, false);
-	}
 	minfo.window = window;
 	minfo.opengl_ctx = context;
 	minfo.display_link = display_link;
@@ -421,7 +424,6 @@ void kf_terminate_video(kf_PlatformSpecificContext ctx)
 	NSApplication_terminate(NSApp, (id)context->window);
 }
 
-
 void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool await)
 {
 	NSEvent *e = NSApplication_nextEventMatchingMask(NSApp, NSEventMaskAny, nil, 0, true);
@@ -437,7 +439,6 @@ void kf_analyze_events(kf_PlatformSpecificContext ctx, kf_EventState *out, bool 
 		out->mousewheel_y = (isize)NSEvent_deltaY(e);
 	}
 }
-
 
 void kf_swap_buffers(kf_PlatformSpecificContext ctx) {
 	MInfo *context = ctx;
